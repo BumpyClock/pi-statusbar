@@ -91,7 +91,7 @@ export class ManagedShellSession {
   private readonly onStateChange: () => void;
   private readonly onCommandSuccess: (command: string, cwd: string) => void;
   private process: ChildProcessWithoutNullStreams | null = null;
-  private readonly tempDir = mkdtempSync(join(tmpdir(), "powerline-bash-mode-"));
+  private readonly tempDir = mkdtempSync(join(tmpdir(), "statusbar-bash-mode-"));
   private buffer = "";
   private commandCounter = 0;
   private currentCommandId: string | null = null;

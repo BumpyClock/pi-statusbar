@@ -1,20 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-	parsePowerlineConfig,
+	parseStatusbarConfig,
 	resolvePresetDef,
 	mergeSegmentsWithCustomItems,
-	nextPowerlineSettingWithPreset,
-} from "../powerline-config.ts";
+	nextStatusbarSettingWithPreset,
+} from "../statusbar-config.ts";
 import { PRESETS } from "../presets.ts";
 import type { PresetDef, StatusLinePreset } from "../types.ts";
 
 const BUILTIN_NAMES = Object.keys(PRESETS) as StatusLinePreset[];
 
-// ── parsePowerlineConfig: user preset map ────────────────────────────────
+// ── parseStatusbarConfig: user preset map ────────────────────────────────
 
-test("parsePowerlineConfig parses user presets map", () => {
-	const config = parsePowerlineConfig(
+test("parseStatusbarConfig parses user presets map", () => {
+	const config = parseStatusbarConfig(
 		{
 			preset: "daily",
 			presets: {
@@ -35,8 +35,8 @@ test("parsePowerlineConfig parses user presets map", () => {
 	assert.equal(config.presets.daily.separator, "slash");
 });
 
-test("parsePowerlineConfig filters invalid segment ids from user presets", () => {
-	const config = parsePowerlineConfig(
+test("parseStatusbarConfig filters invalid segment ids from user presets", () => {
+	const config = parseStatusbarConfig(
 		{
 			preset: "test",
 			presets: {
@@ -56,15 +56,15 @@ test("parsePowerlineConfig filters invalid segment ids from user presets", () =>
 	]);
 });
 
-test("parsePowerlineConfig legacy string config still works", () => {
-	const config = parsePowerlineConfig("compact", BUILTIN_NAMES);
+test("parseStatusbarConfig legacy string config still works", () => {
+	const config = parseStatusbarConfig("compact", BUILTIN_NAMES);
 	assert.equal(config.preset, "compact");
 	assert.deepEqual(config.presets, {});
 	assert.deepEqual(config.customItems, []);
 });
 
-test("parsePowerlineConfig legacy object config without presets still works", () => {
-	const config = parsePowerlineConfig(
+test("parseStatusbarConfig legacy object config without presets still works", () => {
+	const config = parseStatusbarConfig(
 		{ preset: "full", customItems: [{ id: "ci", statusKey: "ci" }] },
 		BUILTIN_NAMES,
 	);
@@ -73,8 +73,8 @@ test("parsePowerlineConfig legacy object config without presets still works", ()
 	assert.equal(config.customItems.length, 1);
 });
 
-test("parsePowerlineConfig ignores invalid preset map entries", () => {
-	const config = parsePowerlineConfig(
+test("parseStatusbarConfig ignores invalid preset map entries", () => {
+	const config = parseStatusbarConfig(
 		{
 			preset: "default",
 			presets: {
@@ -93,8 +93,8 @@ test("parsePowerlineConfig ignores invalid preset map entries", () => {
 	assert.equal(config.presets["ok"], undefined);
 });
 
-test("parsePowerlineConfig normalizes separator in user preset", () => {
-	const config = parsePowerlineConfig(
+test("parseStatusbarConfig normalizes separator in user preset", () => {
+	const config = parseStatusbarConfig(
 		{
 			preset: "test",
 			presets: {
@@ -106,8 +106,8 @@ test("parsePowerlineConfig normalizes separator in user preset", () => {
 	assert.equal(config.presets.test.separator, "powerline");
 });
 
-test("parsePowerlineConfig drops invalid separator in user preset", () => {
-	const config = parsePowerlineConfig(
+test("parseStatusbarConfig drops invalid separator in user preset", () => {
+	const config = parseStatusbarConfig(
 		{
 			preset: "test",
 			presets: {
@@ -119,8 +119,8 @@ test("parsePowerlineConfig drops invalid separator in user preset", () => {
 	assert.equal(config.presets.test.separator, undefined);
 });
 
-test("parsePowerlineConfig ignores user presets that conflict with built-ins", () => {
-	const config = parsePowerlineConfig(
+test("parseStatusbarConfig ignores user presets that conflict with built-ins", () => {
+	const config = parseStatusbarConfig(
 		{
 			preset: "default",
 			presets: {
@@ -137,8 +137,8 @@ test("parsePowerlineConfig ignores user presets that conflict with built-ins", (
 	assert.deepEqual(config.presets.daily.leftSegments, ["model"]);
 });
 
-test("parsePowerlineConfig validates segment options in user preset", () => {
-	const config = parsePowerlineConfig(
+test("parseStatusbarConfig validates segment options in user preset", () => {
+	const config = parseStatusbarConfig(
 		{
 			preset: "opts",
 			presets: {
@@ -163,8 +163,8 @@ test("parsePowerlineConfig validates segment options in user preset", () => {
 	});
 });
 
-test("parsePowerlineConfig sanitizes colors in user preset", () => {
-	const config = parsePowerlineConfig(
+test("parseStatusbarConfig sanitizes colors in user preset", () => {
+	const config = parseStatusbarConfig(
 		{
 			preset: "colored",
 			presets: {
@@ -193,14 +193,14 @@ test("parsePowerlineConfig sanitizes colors in user preset", () => {
 // ── resolvePresetDef ─────────────────────────────────────────────────────
 
 test("resolvePresetDef returns built-in preset by name", () => {
-	const config = parsePowerlineConfig("default", BUILTIN_NAMES);
+	const config = parseStatusbarConfig("default", BUILTIN_NAMES);
 	const resolved = resolvePresetDef(config, PRESETS);
 	assert.deepEqual(resolved.leftSegments, PRESETS.default.leftSegments);
 	assert.equal(resolved.separator, PRESETS.default.separator);
 });
 
 test("resolvePresetDef resolves user preset extending built-in", () => {
-	const config = parsePowerlineConfig(
+	const config = parseStatusbarConfig(
 		{
 			preset: "daily",
 			presets: {
@@ -223,7 +223,7 @@ test("resolvePresetDef resolves user preset extending built-in", () => {
 });
 
 test("resolvePresetDef merges preset colors with inherited colors", () => {
-	const config = parsePowerlineConfig(
+	const config = parseStatusbarConfig(
 		{
 			preset: "colored",
 			presets: {
@@ -242,7 +242,7 @@ test("resolvePresetDef merges preset colors with inherited colors", () => {
 });
 
 test("resolvePresetDef resolves user-to-user extends chain", () => {
-	const config = parsePowerlineConfig(
+	const config = parseStatusbarConfig(
 		{
 			preset: "child",
 			presets: {
@@ -270,7 +270,7 @@ test("resolvePresetDef resolves user-to-user extends chain", () => {
 });
 
 test("resolvePresetDef falls back to default on circular extends", () => {
-	const config = parsePowerlineConfig(
+	const config = parseStatusbarConfig(
 		{
 			preset: "a",
 			presets: {
@@ -287,7 +287,7 @@ test("resolvePresetDef falls back to default on circular extends", () => {
 });
 
 test("resolvePresetDef falls back to default when user preset extends unknown preset", () => {
-	const config = parsePowerlineConfig(
+	const config = parseStatusbarConfig(
 		{
 			preset: "broken",
 			presets: {
@@ -302,7 +302,7 @@ test("resolvePresetDef falls back to default when user preset extends unknown pr
 });
 
 test("resolvePresetDef falls back to default for unknown preset name", () => {
-	const config = parsePowerlineConfig({ preset: "nonexistent" }, BUILTIN_NAMES);
+	const config = parseStatusbarConfig({ preset: "nonexistent" }, BUILTIN_NAMES);
 	// preset falls back to "default" when not in built-in list
 	assert.equal(config.preset, "default");
 	const resolved = resolvePresetDef(config, PRESETS);
@@ -310,7 +310,7 @@ test("resolvePresetDef falls back to default for unknown preset name", () => {
 });
 
 test("resolvePresetDef merges segmentOptions per segment", () => {
-	const config = parsePowerlineConfig(
+	const config = parseStatusbarConfig(
 		{
 			preset: "opts",
 			presets: {
@@ -342,7 +342,7 @@ test("resolvePresetDef does not mutate PRESETS", () => {
 		JSON.stringify(PRESETS.default.segmentOptions),
 	);
 
-	const config = parsePowerlineConfig(
+	const config = parseStatusbarConfig(
 		{
 			preset: "mutator",
 			presets: {
@@ -455,10 +455,10 @@ test("mergeSegmentsWithCustomItems preserves custom items not in preset", () => 
 	assert.deepEqual(merged.secondarySegments, ["custom:footer"]);
 });
 
-// ── nextPowerlineSettingWithPreset preserves presets ──────────────────────
+// ── nextStatusbarSettingWithPreset preserves presets ──────────────────────
 
-test("nextPowerlineSettingWithPreset preserves presets key", () => {
-	const updated = nextPowerlineSettingWithPreset(
+test("nextStatusbarSettingWithPreset preserves presets key", () => {
+	const updated = nextStatusbarSettingWithPreset(
 		{ preset: "daily", presets: { daily: { extends: "default" } } },
 		"default",
 	);
@@ -468,15 +468,15 @@ test("nextPowerlineSettingWithPreset preserves presets key", () => {
 	assert.deepEqual(obj.presets, { daily: { extends: "default" } });
 });
 
-test("nextPowerlineSettingWithPreset works with string input", () => {
-	const updated = nextPowerlineSettingWithPreset("compact", "default");
+test("nextStatusbarSettingWithPreset works with string input", () => {
+	const updated = nextStatusbarSettingWithPreset("compact", "default");
 	assert.equal(updated, "default");
 });
 
-// ── parsePowerlineConfig accepts user preset as active preset ────────────
+// ── parseStatusbarConfig accepts user preset as active preset ────────────
 
-test("parsePowerlineConfig accepts user-defined preset name as active preset", () => {
-	const config = parsePowerlineConfig(
+test("parseStatusbarConfig accepts user-defined preset name as active preset", () => {
+	const config = parseStatusbarConfig(
 		{
 			preset: "daily",
 			presets: {
@@ -490,8 +490,8 @@ test("parsePowerlineConfig accepts user-defined preset name as active preset", (
 	assert.equal(config.preset, "daily");
 });
 
-test("parsePowerlineConfig falls back to default for unknown preset without user presets", () => {
-	const config = parsePowerlineConfig({ preset: "daily" }, BUILTIN_NAMES);
+test("parseStatusbarConfig falls back to default for unknown preset without user presets", () => {
+	const config = parseStatusbarConfig({ preset: "daily" }, BUILTIN_NAMES);
 	// No user presets defined → "daily" is unknown → fallback to default
 	assert.equal(config.preset, "default");
 });

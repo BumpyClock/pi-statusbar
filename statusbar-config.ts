@@ -15,7 +15,7 @@ import type {
 	UserPresetDef,
 } from "./types.ts";
 
-export interface PowerlineConfig {
+export interface StatusbarConfig {
 	preset: string;
 	presets: Record<string, UserPresetDef>;
 	customItems: CustomStatusItem[];
@@ -82,8 +82,12 @@ function normalizeCustomStatusItem(
 		position: normalizeCustomItemPosition(raw.position),
 		color: normalizeCustomColor(raw.color),
 		prefix: normalizeCustomPrefix(raw.prefix),
-		hideWhenMissing: raw.hideWhenMissing !== false,
-		excludeFromExtensionStatuses: raw.excludeFromExtensionStatuses !== false,
+		hideWhenMissing:
+			typeof raw.hideWhenMissing === "boolean" ? raw.hideWhenMissing : true,
+		excludeFromExtensionStatuses:
+			typeof raw.excludeFromExtensionStatuses === "boolean"
+				? raw.excludeFromExtensionStatuses
+				: true,
 	};
 }
 
@@ -269,13 +273,13 @@ function normalizePresetColors(
 	for (const [key, rawColor] of Object.entries(raw)) {
 		if (!DEFAULT_COLOR_KEYS.has(key)) {
 			console.debug(
-				`[powerline-footer] Ignoring invalid color key "${key}" in user preset "${presetId}"`,
+				`[pi-statusbar] Ignoring invalid color key "${key}" in user preset "${presetId}"`,
 			);
 			continue;
 		}
 		if (typeof rawColor !== "string") {
 			console.debug(
-				`[powerline-footer] Ignoring non-string color value for "${key}" in user preset "${presetId}"`,
+				`[pi-statusbar] Ignoring non-string color value for "${key}" in user preset "${presetId}"`,
 			);
 			continue;
 		}
@@ -283,7 +287,7 @@ function normalizePresetColors(
 		const color = rawColor.trim();
 		if (!color) {
 			console.debug(
-				`[powerline-footer] Ignoring empty color value for "${key}" in user preset "${presetId}"`,
+				`[pi-statusbar] Ignoring empty color value for "${key}" in user preset "${presetId}"`,
 			);
 			continue;
 		}
@@ -335,21 +339,19 @@ function normalizeUserPresets(
 	for (const [id, entry] of Object.entries(raw)) {
 		if (!normalizeCustomItemId(id)) {
 			console.debug(
-				`[powerline-footer] Ignoring user preset with invalid id: "${id}"`,
+				`[pi-statusbar] Ignoring user preset with invalid id: "${id}"`,
 			);
 			continue;
 		}
 		if (normalizeBuiltinPreset(id, builtInPresetNames)) {
 			console.debug(
-				`[powerline-footer] Ignoring user preset "${id}" because built-in presets take precedence`,
+				`[pi-statusbar] Ignoring user preset "${id}" because built-in presets take precedence`,
 			);
 			continue;
 		}
 		const preset = normalizeUserPreset(entry, id);
 		if (!preset) {
-			console.debug(
-				`[powerline-footer] Ignoring non-object user preset: "${id}"`,
-			);
+			console.debug(`[pi-statusbar] Ignoring non-object user preset: "${id}"`);
 			continue;
 		}
 		result[id] = preset;
@@ -357,11 +359,11 @@ function normalizeUserPresets(
 	return result;
 }
 
-export function parsePowerlineConfig(
+export function parseStatusbarConfig(
 	value: unknown,
 	presets: readonly StatusLinePreset[],
-): PowerlineConfig {
-	const defaultConfig: PowerlineConfig = {
+): StatusbarConfig {
+	const defaultConfig: StatusbarConfig = {
 		preset: "default",
 		presets: {},
 		customItems: [],
@@ -398,7 +400,7 @@ export function parsePowerlineConfig(
 // ── Preset resolver ───────────────────────────────────────────────────────
 
 export function resolvePresetDef(
-	config: PowerlineConfig,
+	config: StatusbarConfig,
 	builtIns: Readonly<Record<StatusLinePreset, PresetDef>>,
 ): PresetDef {
 	const fallback = builtIns.default;
@@ -420,7 +422,7 @@ export function resolvePresetDef(
 	);
 	if (!base) {
 		console.debug(
-			`[powerline-footer] Circular or broken extends chain for preset "${config.preset}", using default`,
+			`[pi-statusbar] Circular or broken extends chain for preset "${config.preset}", using default`,
 		);
 		return fallback;
 	}
@@ -447,7 +449,7 @@ function resolveExtendsChain(
 	const parent = userPresets[extendsName];
 	if (!parent) {
 		console.debug(
-			`[powerline-footer] User preset extends unknown preset "${extendsName}", using default`,
+			`[pi-statusbar] User preset extends unknown preset "${extendsName}", using default`,
 		);
 		return builtIns.default;
 	}
@@ -522,25 +524,25 @@ export function mergeSegmentsWithCustomItems(
 	};
 }
 
-export function nextPowerlineSettingWithPreset(
-	existingPowerlineSetting: unknown,
+export function nextStatusbarSettingWithPreset(
+	existingStatusbarSetting: unknown,
 	preset: string,
 ): unknown {
-	if (!isRecord(existingPowerlineSetting)) {
+	if (!isRecord(existingStatusbarSetting)) {
 		return preset;
 	}
-	return { ...existingPowerlineSetting, preset };
+	return { ...existingStatusbarSetting, preset };
 }
 
-export function nextPowerlineSettingWithOptions(
-	existingPowerlineSetting: unknown,
-	updates: Partial<Pick<PowerlineConfig, "mouseScroll" | "fixedEditor">>,
+export function nextStatusbarSettingWithOptions(
+	existingStatusbarSetting: unknown,
+	updates: Partial<Pick<StatusbarConfig, "mouseScroll" | "fixedEditor">>,
 	currentPreset: string,
 ): unknown {
-	if (!isRecord(existingPowerlineSetting)) {
+	if (!isRecord(existingStatusbarSetting)) {
 		return { preset: currentPreset, ...updates };
 	}
-	return { ...existingPowerlineSetting, ...updates };
+	return { ...existingStatusbarSetting, ...updates };
 }
 
 export function collectHiddenExtensionStatusKeys(

@@ -1,8 +1,8 @@
 <p>
-  <img src="banner.png" alt="pi-powerline-footer" width="1100">
+  <img src="banner.png" alt="pi-statusbar" width="1100">
 </p>
 
-# pi-powerline-footer
+# pi-statusbar
 
 Customizes the default [pi](https://github.com/badlogic/pi-mono) editor with a powerline-style status bar, welcome overlay, and AI-generated "vibes" for loading messages. Inspired by [Powerlevel10k](https://github.com/romkatv/powerlevel10k) and [oh-my-pi](https://github.com/can1357/oh-my-pi).
 
@@ -10,7 +10,7 @@ Customizes the default [pi](https://github.com/badlogic/pi-mono) editor with a p
 
 ## Features
 
-**Editor stash** — Press `Alt+S` to save your editor content and clear the editor, type a quick prompt, and your stashed text auto-restores when the agent finishes. Toggles between stash, pop, and update-existing-stash. A `stash` indicator appears in the powerline bar while text is stashed.
+**Editor stash** — Press `Alt+S` to save your editor content and clear the editor, type a quick prompt, and your stashed text auto-restores when the agent finishes. Toggles between stash, pop, and update-existing-stash. A `stash` indicator appears in the statusbar while text is stashed.
 
 **Working Vibes** — AI-generated themed loading messages. Set `/vibe star trek` and your "Working..." becomes "Running diagnostics..." or "Engaging warp drive...". Supports any theme: pirate, zen, noir, cowboy, etc.
 
@@ -18,7 +18,7 @@ Customizes the default [pi](https://github.com/badlogic/pi-mono) editor with a p
 
 **Rounded box design** — Status renders directly in the editor's top border, not as a separate footer.
 
-**Fixed editor cluster** — In interactive TUI sessions, chat/feed content scrolls above the fixed Pi working/status line, powerline rows, editor, ghost suggestions, bash transcript, and last-prompt/status rows. Scroll chat with the mouse wheel, PageUp/PageDown, Command+PageUp/PageDown, Ctrl+Shift+Up/Down, or message-jump shortcuts; the editor stays put. Drag text to copy it, drag selection to the viewport edge to scroll, double-click a line to select it, and right-click to open the terminal menu. Use `/powerline fixed-editor off` for Pi’s regular scrolling layout, or `/powerline mouse-scroll off` for native terminal selection.
+**Fixed editor cluster** — In interactive TUI sessions, chat/feed content scrolls above the fixed Pi working/status line, statusbar rows, editor, ghost suggestions, bash transcript, and last-prompt/status rows. Scroll chat with the mouse wheel, PageUp/PageDown, Command+PageUp/PageDown, Ctrl+Shift+Up/Down, or message-jump shortcuts; the editor stays put. Drag text to copy it, drag selection to the viewport edge to scroll, double-click a line to select it, and right-click to open the terminal menu. Use `/statusbar fixed-editor off` for Pi’s regular scrolling layout, or `/statusbar mouse-scroll off` for native terminal selection.
 
 **Live thinking level indicator** — Shows current thinking level (`think:off`, `think:med`, etc.) with per-level colors. High and xhigh levels use a rainbow effect inspired by Claude Code's ultrathink.
 
@@ -26,7 +26,7 @@ Customizes the default [pi](https://github.com/badlogic/pi-mono) editor with a p
 
 **Git integration** — Async status fetching with 1s cache TTL. Automatically invalidates on file writes/edits. Shows branch, staged (+), unstaged (\*), and untracked (?) counts.
 
-**Context awareness** — Color-coded warnings at 70% (yellow) and 90% (red) context usage. During streaming, the context segment refreshes from live assistant usage instead of waiting for the next turn. Auto-compact indicator when enabled. If `pi-custom-compaction` is installed and enabled, the powerline automatically hides native context segments so the footer does not show stale post-summary usage.
+**Context awareness** — Color-coded warnings at 70% (yellow) and 90% (red) context usage. During streaming, the context segment refreshes from live assistant usage instead of waiting for the next turn. Auto-compact indicator when enabled. If `pi-custom-compaction` is installed and enabled, the statusbar automatically hides native context segments so the footer does not show stale post-summary usage.
 
 **Token intelligence** — Smart formatting (1.2k, 45M), subscription detection (shows "(sub)" vs dollar cost).
 
@@ -37,26 +37,26 @@ Customizes the default [pi](https://github.com/badlogic/pi-mono) editor with a p
 ## Installation
 
 ```bash
-pi install npm:pi-powerline-footer
+pi install npm:@bumpyclock/pi-statusbar
 ```
 
 Restart pi to activate.
 
 ## Usage
 
-Activates automatically. Toggle with `/powerline`, switch presets with `/powerline <name>`, fixed-editor mode with `/powerline fixed-editor on|off|toggle`, and wheel mode with `/powerline mouse-scroll on|off|toggle`.
+Activates automatically. Toggle with `/statusbar`, switch presets with `/statusbar <name>`, fixed-editor mode with `/statusbar fixed-editor on|off|toggle`, and wheel mode with `/statusbar mouse-scroll on|off|toggle`.
 
 Fixed editor is on by default.
 
-- `/powerline fixed-editor off` — return to Pi’s regular scrolling layout
-- `/powerline fixed-editor on` — re-enable the fixed editor
-- `/powerline fixed-editor toggle` — switch between the two
+- `/statusbar fixed-editor off` — return to Pi’s regular scrolling layout
+- `/statusbar fixed-editor on` — re-enable the fixed editor
+- `/statusbar fixed-editor toggle` — switch between the two
 
 You can also set it in `~/.pi/agent/settings.json` or project-local `.pi/settings.json`:
 
 ```json
 {
-  "powerline": {
+  "statusbar": {
     "preset": "default",
     "fixedEditor": false
   }
@@ -75,18 +75,18 @@ Use `"fixedEditor": true` to enable it again. Add `"mouseScroll": false` if you 
 | `ascii`   | Safe for any terminal                                                                                                                                                     |
 | `custom`  | Reserved built-in preset with selectable baseline segments (`model`, `shell_mode`, `path`, `git`, tokens/cost/context); this name cannot be used for user-defined presets |
 
-**Environment:** `POWERLINE_NERD_FONTS=1` to force Nerd Fonts, `=0` for ASCII.
+**Environment:** `STATUSBAR_NERD_FONTS=1` to force Nerd Fonts, `=0` for ASCII.
 
-Preset selection is saved to `~/.pi/agent/settings.json` under `powerline` and restored on startup.
-Run `/powerline default` to switch back to the default preset.
+Preset selection is saved to `~/.pi/agent/settings.json` under `statusbar` and restored on startup.
+Run `/statusbar default` to switch back to the default preset.
 
 ### User-defined presets
 
-Define named presets in `powerline.presets` when you want custom layouts without editing `presets.ts`. The selected `powerline.preset` can be either a built-in preset or one of your user-defined preset names. Built-in names always win on conflicts, so use names like `daily`, `work`, or `debug` instead of redefining `default`.
+Define named presets in `statusbar.presets` when you want custom layouts without editing `presets.ts`. The selected `statusbar.preset` can be either a built-in preset or one of your user-defined preset names. Built-in names always win on conflicts, so use names like `daily`, `work`, or `debug` instead of redefining `default`.
 
 ```json
 {
-  "powerline": {
+  "statusbar": {
     "preset": "daily",
     "presets": {
       "daily": {
@@ -138,18 +138,18 @@ Available segment ids: `model`, `thinking`, `shell_mode`, `path`, `git`, `subage
 
 Custom item placement can be controlled in two places. If a preset includes `custom:<id>` in `leftSegments`, `rightSegments`, or `secondarySegments`, that preset-level placement wins. If no preset segment array references the custom item, `customItems.position` is used as the fallback placement. `customItems.position` is still supported; preset arrays are the more explicit layout control.
 
-When merging global `~/.pi/agent/settings.json` with project-local `.pi/settings.json`, the extension settings loader merges object fields (like `powerline.presets` and `segmentOptions`) field-by-field, but segment arrays (`leftSegments`, `rightSegments`, `secondarySegments`) replace the global arrays. This settings merge is separate from preset `extends` inheritance. Restart pi or start a new session after editing settings, because settings changes are read during startup/session setup.
+When merging global `~/.pi/agent/settings.json` with project-local `.pi/settings.json`, the extension settings loader merges object fields (like `statusbar.presets` and `segmentOptions`) field-by-field, but segment arrays (`leftSegments`, `rightSegments`, `secondarySegments`) from project settings completely replace the global arrays. This settings file merge is separate from preset `extends` inheritance, where omitted segment arrays inherit from the parent preset. Restart pi or start a new session after editing settings, because settings changes are read during startup/session setup.
 
 ### Custom items from extension statuses
 
-You can promote any extension status key into its own dedicated powerline item. This gives you a general way to register your own status items without changing this extension.
+You can promote any extension status key into its own dedicated statusbar item. This gives you a general way to register your own status items without changing this extension.
 
 1. Any extension can publish status text through `ctx.ui.setStatus("my-key", "...value...")`.
-2. Configure `powerline.customItems` to place those keys on the left, right, or secondary row.
+2. Configure `statusbar.customItems` to place those keys on the left, right, or secondary row.
 
 ```json
 {
-  "powerline": {
+  "statusbar": {
     "preset": "default",
     "customItems": [
       {
@@ -180,7 +180,7 @@ You can promote any extension status key into its own dedicated powerline item. 
 - `hideWhenMissing` (optional): hide item when no status is present (default `true`)
 - `excludeFromExtensionStatuses` (optional): omit this key from the aggregate `extension_statuses` segment (default `true`)
 
-If you still prefer the old style, `"powerline": "default"` continues to work.
+For shorthand config, `"statusbar": "default"` selects the default preset.
 
 ## Bash mode
 
@@ -231,7 +231,7 @@ Use `Alt+S` / `Option+S` as a quick stash toggle while drafting. It keeps one ac
 
 Auto-restore after an agent run only happens when the editor is still empty. If you typed meanwhile, the stash is preserved.
 
-The `stash` indicator appears in the powerline bar (on presets with `extension_statuses`). Active stash is still session-local and resets on session switch / disable, but stash history is persisted to `~/.pi/agent/powerline-footer/stash-history.json` so it survives restarts.
+The `stash` indicator appears in the statusbar (on presets with `extension_statuses`). Active stash is still session-local and resets on session switch / disable, but stash history is persisted to `~/.pi/agent/pi-statusbar/stash-history.json` so it survives restarts.
 
 ### Stash history
 
@@ -268,7 +268,7 @@ You can override shortcut keys in `~/.pi/agent/settings.json`:
 
 ```json
 {
-  "powerlineShortcuts": {
+  "statusbarShortcuts": {
     "stashHistory": "ctrl+alt+h",
     "copyEditor": "ctrl+alt+c",
     "cutEditor": "ctrl+alt+x",
@@ -375,11 +375,11 @@ The thinking segment shows live updates when you change thinking level:
 
 The path segment supports three modes:
 
-| Mode          | Example                                   | Description                                      |
-| ------------- | ----------------------------------------- | ------------------------------------------------ |
-| `basename`    | `powerline-footer`                        | Just the directory name (default)                |
-| `abbreviated` | `…/extensions/powerline-footer`           | Full path with home abbreviated and length limit |
-| `full`        | `~/.pi/agent/extensions/powerline-footer` | Complete path with home abbreviated              |
+| Mode          | Example                               | Description                                      |
+| ------------- | ------------------------------------- | ------------------------------------------------ |
+| `basename`    | `pi-statusbar`                        | Just the directory name (default)                |
+| `abbreviated` | `…/extensions/pi-statusbar`           | Full path with home abbreviated and length limit |
+| `full`        | `~/.pi/agent/extensions/pi-statusbar` | Complete path with home abbreviated              |
 
 Configure via preset options: `path: { mode: "full" }`
 
@@ -416,7 +416,7 @@ Colors are configurable via pi's theme system. Each preset defines its own color
 
 ### Custom Theme Override
 
-Create `~/.pi/agent/extensions/powerline-footer/theme.json`:
+Create `~/.pi/agent/extensions/pi-statusbar/theme.json`:
 
 ```json
 {

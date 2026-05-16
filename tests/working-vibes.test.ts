@@ -41,7 +41,7 @@ function ensurePiModuleLinks(): { cleanup: () => void } {
 
 test("generateVibesBatch includes a system prompt so faux providers can return text", async () => {
   const links = ensurePiModuleLinks();
-  const home = mkdtempSync(join(tmpdir(), "powerline-vibes-home-"));
+  const home = mkdtempSync(join(tmpdir(), "statusbar-vibes-home-"));
   const previousHome = process.env.HOME;
   process.env.HOME = home;
 
@@ -59,7 +59,7 @@ test("generateVibesBatch includes a system prompt so faux providers can return t
       assert.ok(model);
 
       registration.setResponses([
-        (context) => {
+        (context: { systemPrompt?: string }) => {
           assert.match(context.systemPrompt ?? "", /loading messages/i);
           return fauxAssistantMessage("Engaging warp drive...\nRunning diagnostics...");
         },
@@ -74,7 +74,7 @@ test("generateVibesBatch includes a system prompt so faux providers can return t
             return { ok: true, apiKey: "test-key", headers: {} };
           },
         },
-      });
+      } as any);
 
       assert.equal(setVibeModel("test-provider/test-model"), true);
 
@@ -103,7 +103,7 @@ test("generateVibesBatch includes a system prompt so faux providers can return t
 
 test("on-demand vibe generation includes a system prompt for providers that require instructions", async () => {
   const links = ensurePiModuleLinks();
-  const home = mkdtempSync(join(tmpdir(), "powerline-vibes-home-"));
+  const home = mkdtempSync(join(tmpdir(), "statusbar-vibes-home-"));
   const previousHome = process.env.HOME;
   process.env.HOME = home;
 
@@ -121,7 +121,7 @@ test("on-demand vibe generation includes a system prompt for providers that requ
       assert.ok(model);
 
       registration.setResponses([
-        (context) => {
+        (context: { systemPrompt?: string }) => {
           assert.match(context.systemPrompt ?? "", /loading messages/i);
           return fauxAssistantMessage("Engaging warp drive...");
         },
@@ -136,7 +136,7 @@ test("on-demand vibe generation includes a system prompt for providers that requ
             return { ok: true, apiKey: "test-key", headers: {} };
           },
         },
-      });
+      } as any);
 
       assert.equal(setVibeTheme("star trek"), true);
       assert.equal(setVibeModel("test-provider/test-model"), true);
@@ -170,7 +170,7 @@ test("on-demand vibe generation includes a system prompt for providers that requ
 
 test("generateVibesBatch preserves provider errors instead of reporting an empty response", async () => {
   const links = ensurePiModuleLinks();
-  const home = mkdtempSync(join(tmpdir(), "powerline-vibes-home-"));
+  const home = mkdtempSync(join(tmpdir(), "statusbar-vibes-home-"));
   const previousHome = process.env.HOME;
   process.env.HOME = home;
 
@@ -203,7 +203,7 @@ test("generateVibesBatch preserves provider errors instead of reporting an empty
             return { ok: true, apiKey: "test-key", headers: {} };
           },
         },
-      });
+      } as any);
 
       assert.equal(setVibeModel("test-provider/test-model"), true);
 

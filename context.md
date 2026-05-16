@@ -1,63 +1,75 @@
 # Code Context
 
 ## Files Retrieved
-
-1. `index.ts` (lines 13-31, 67-73, 623-656, 956-959, 1760-1819, 2056-2172) — primary extension entrypoint now wired to user-defined preset config and runtime preset resolution.
-2. `powerline-config.ts` (lines 4-10, 16-20, 89-104, 119-128, 132-182, 186-264, 268-330, 332-365) — central parser/resolver for powerline config, including `powerline.presets`, validation, extends-chain resolution, and persistence helpers.
-3. `types.ts` (lines 29-53, 67-75, 100-121) — type model widened to support custom/`extension_statuses` segment IDs and user preset defs.
-4. `segments.ts` (lines 431-485) — segment registry + `renderSegment` custom segment path using `custom:` IDs.
-5. `README.md` (lines 68-132, 373-375) — docs now mention user-defined presets and added segment IDs.
-6. `tests/presets-config.test.ts` (lines 1-420) — new test suite covering user preset parsing/extends/deduplication/persistence behavior.
-7. `package.json` (lines 28-30) — test script confirms suite runs via `node --experimental-strip-types --test tests/**/*.test.ts`.
-8. `CHANGELOG.md` (lines 1-7) — `Unreleased` header empty; new feature not yet logged.
+1. `bash-mode/completion.ts` (lines 418-505 and 499-505) — `AutocompleteProvider` implementation methods currently typed as synchronous/union-return and failing interface conformance diagnostics.
+2. `shortcuts.ts` (lines 40-47) — `matchesConfiguredShortcut` runtime path to `matchesKey` with raw `string` arg triggering `KeyId` mismatch.
+3. `node_modules/@earendil-works/pi-tui/dist/autocomplete.d.ts` (lines 17-21, 34-37) — source of `AutocompleteProvider.getSuggestions` contract (`Promise<AutocompleteSuggestions | null>`).
+4. `node_modules/@earendil-works/pi-tui/dist/keys.d.ts` (lines 31-33, 42, 165) — `KeyId` includes `pageUp`/`pageDown` (camelCase), not `pageup`/`pagedown`.
+5. `index.ts` (lines 1905-1911, 1915-1945, 3160-3167) — call sites for `matchesConfiguredShortcut` and where bash autocomplete providers are wrapped/installed.
+6. `tests/bash-mode.test.ts` (lines 736-772) — explicit sync return assumptions for `getSuggestions` (`instanceof Promise` checks).
 
 ## Key Code
 
-- **Config shape expanded** (`powerline-config.ts:4-10`): `PowerlineConfig` now includes `preset: string` (not just built-in union) and `presets: Record<string, UserPresetDef>`.
+**Diagnostics captured (TypeScript LSP-equivalent run with `npx tsc --pretty false --noEmit --types node --allowImportingTsExtensions bash-mode/completion.ts shortcuts.ts`):**
+- `bash-mode/completion.ts:419` `BashAutocompleteProvider.getSuggestions(): AutocompleteSuggestions | null`
+- `bash-mode/completion.ts:459` `OneOffBashAutocompleteProvider.getSuggestions(): AutocompleteSuggestions | null`
+- `bash-mode/completion.ts:499` `ModeAwareAutocompleteProvider.getSuggestions(...): AutocompleteSuggestions | null | Promise<...>`
+- `shortcuts.ts:46` `matchesConfiguredShortcut(...){... return matchesKey(data, shortcut); }`
 
-- **User preset parser + validation** (`powerline-config.ts:186-233`, `215-263`):
-  - `normalizeUserPreset()` accepts user preset overrides:
-    - `extends`, `leftSegments`, `rightSegments`, `secondarySegments`, `separator`, `segmentOptions`, `colors`.
-  - `normalizeSegmentList()` filters unknown IDs; built-ins + `custom:<id>` only.
-  - `normalizeSeparator()` constrains to known styles.
-  - `normalizeSegmentOptions()` validates model/path/git/time options.
-  - `normalizeUserPresets()` drops invalid preset ids, non-object entries, and built-in name collisions.
+**Contract mismatch source** (`pi-tui`):
+```ts
+export interface AutocompleteProvider {
+  getSuggestions(
+    lines: string[], cursorLine: number, cursorCol: number,
+    options: { signal: AbortSignal; force?: boolean }
+  ): Promise<AutocompleteSuggestions | null>;
+}
+```
 
-- **Preset resolution** (`powerline-config.ts:268-330`):
-  - `resolvePresetDef(config, PRESETS)` handles both built-ins and user presets.
-  - `resolveExtendsChain()` walks `extends`, prevents cycles, falls back to `default` on broken/circular chains.
-  - `applyUserPresetOverBase()` merges/overrides segment lists/options/colors per field.
+**Current provider signatures**:
+- `BashAutocompleteProvider.getSuggestions()` — no args, sync return.
+- `OneOffBashAutocompleteProvider.getSuggestions()` — no args, sync return.
+- `ModeAwareAutocompleteProvider.getSuggestions(...)` — mixed return including raw sync path.
 
-- **Runtime flow** (`index.ts`):
-  - Startup: `config = parsePowerlineConfig(startupSettings.powerline, PRESET_NAMES)` (`index.ts:957-959`).
-  - `/powerline` command parsing and apply (`index.ts:1765-1818`): accepts user preset names, persists with `nextPowerlineSettingWithPreset` and shows built-in + user preset list.
-  - Render: every segment build/layout step resolves current preset via `resolvePresetDef(config, PRESETS)` (`index.ts:2056-2167`).
+**Shortcut matching**:
+```ts
+const normalizedShortcut = shortcut.toLowerCase();
+if (shortcutUsesSuper(normalizedShortcut)) { ... }
+return matchesKey(data, shortcut);
+```
+- Type error: `shortcut` is `string`, but `matchesKey` requires `KeyId`.
 
-- **Custom items + custom segments** (`segments.ts:453-485`): `renderSegment` handles `custom:` IDs; custom entries from `ctx.customItemsById` pull `extensionStatuses` and normalize values.
-
-- **Deduped custom segment merge** (`powerline-config.ts:332-358`): `mergeSegmentsWithCustomItems()` no longer appends `custom:<id>` if already declared in preset arrays.
-
-- **Tests** (`tests/presets-config.test.ts`): validates parsing, invalid input filtering, inherits/extends chain, circular fallback, dedupe behavior, and persistence helper behavior.
+**`KeyId` constraint relevant detail:**
+- Accepts `pageUp`/`pageDown`, while shortcut normalization layer currently uses lowercase `pageup`/`pagedown`.
 
 ## Architecture
+- `matchesConfiguredShortcut` is the shared router for runtime shortcut dispatch in `index.ts` (chat jump, stash, copy/cut, bash-mode toggle), so any normalization/type-guard change here changes all shortcut matching behavior.
+- Bash providers are installed in `index.ts:3160-3168` via `ModeAwareAutocompleteProvider` wrapper around `defaultProvider` + bash-specific providers.
+- Interface contract must stay compatible with `AutocompleteProvider`; current classes are used where async suggestions are expected.
 
-- Config is loaded/merged from global + project settings (`index.ts:593-594`) and normalized in `parsePowerlineConfig`.
-- Normalized config holds:
-  - selected `preset` string (built-in or user key)
-  - optional `presets` map of user presets
-  - existing `customItems`, `mouseScroll`, `fixedEditor`.
-- `/powerline` handler updates both in-memory config and persisted settings via helper functions in `powerline-config.ts`.
-- Render path resolves effective preset each time layout is needed, then generates segment context and segments from `PresetDef + customItems`.
-- Segment rendering is typed over `StatusLineSegmentId` union, enabling built-ins and `custom:<id>`.
+## Minimal safe fixes
+1. **`bash-mode/completion.ts`**
+   - `BashAutocompleteProvider.getSuggestions`:
+     - Add full params: `(lines, cursorLine, cursorCol, options)`.
+     - Return `Promise<AutocompleteSuggestions | null>` (likely `return Promise.resolve(null)` unless real suggestion logic exists).
+   - `OneOffBashAutocompleteProvider.getSuggestions`:
+     - Same change as above.
+   - `ModeAwareAutocompleteProvider.getSuggestions`:
+     - Change return to `Promise<AutocompleteSuggestions | null>` and align body with awaited provider calls.
+     - Keep fallback for missing `defaultProvider` returning `null` (as resolved promise in async context).
 
-## Suggested task breakdown
+2. **`shortcuts.ts`**
+   - Normalize non-`super` shortcut before `matchesKey` into `KeyId`-compatible string:
+     - map `pageup -> pageUp`, `pagedown -> pageDown` at minimum.
+     - narrow to `KeyId` only after mapping (or explicit local helper/type-guard).
+   - Keep super regex path unchanged.
 
-1. **Changelog**: add unreleased entry describing user-defined presets and merge behavior.
-2. **Behavior polish**: confirm edge-case intent for case sensitivity (`preset` names and `extends`) in user presets; add tests if behavior should be normalized.
-3. **Cleanup**: `presets.ts` still exports `getPreset()` and `PresetDef` is only built-in typed via `Record<StatusLinePreset, PresetDef>`—decide whether dead export can be removed.
-4. **Validation hardening**: consider validating `userPreset.colors` (currently pass-through with no schema check).
-5. **Docs/tests sync**: ensure any remaining user-facing docs mention command discovery (`/powerline` listing now includes user preset names) and add release notes once finalized.
+## Test impact
+- `tests/bash-mode.test.ts`:
+  - `"bash autocomplete providers return null synchronously in shell contexts"` currently asserts no Promise (`lines 736-746`).
+  - `"mode-aware autocomplete provider preserves synchronous default results"` currently asserts returned object is not Promise (`lines 748-772`).
+  - Both need update if `getSuggestions` becomes Promise-based.
+- Existing shortcut tests in `tests/jump-shortcuts.test.ts` only exercise `super+...` flows, so non-super canonicalization change likely requires **new coverage** for `pageup/pagedown` behavior, not replacement of existing coverage.
 
 ## Start Here
-
-Open `powerline-config.ts` first. It contains the full parse/normalize/resolve state machine for the new user-preset feature and explains where most of the behavior guarantees and open questions live.
+Open `bash-mode/completion.ts` around class methods `getSuggestions` (`~lines 419, 459, 499`) first to align signatures with `AutocompleteProvider`, then open `shortcuts.ts` around `matchesConfiguredShortcut` (`~line 40`) for `KeyId`-safe normalization.
