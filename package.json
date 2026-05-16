@@ -22,14 +22,20 @@
   "author": "BumpyClock",
   "license": "MIT",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/BumpyClock/pi-statusbar.git"
   },
   "scripts": {
-    "test": "node --experimental-strip-types --test tests/**/*.test.ts"
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/**/*.test.ts",
+    "bump:patch": "node scripts/bump-version.js patch",
+    "bump:minor": "node scripts/bump-version.js minor",
+    "bump:major": "node scripts/bump-version.js major",
+    "bump:set": "node scripts/bump-version.js"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "^0.74.0",
