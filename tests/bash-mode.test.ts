@@ -488,7 +488,7 @@ test("managed shell session preserves cwd changes across commands", async () => 
 		transcriptMaxBytes: 64 * 1024,
 	});
 	const session = new ManagedShellSession(
-		"/bin/zsh",
+		"/bin/bash",
 		cwd,
 		store,
 		() => {},
@@ -527,7 +527,7 @@ test("managed shell session recovers cleanly after interrupt", async () => {
 		transcriptMaxBytes: 64 * 1024,
 	});
 	const session = new ManagedShellSession(
-		"/bin/zsh",
+		"/bin/bash",
 		cwd,
 		store,
 		() => {},
