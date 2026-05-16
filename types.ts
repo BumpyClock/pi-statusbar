@@ -99,13 +99,24 @@ export interface CustomStatusItem {
 
 // Preset definition
 export interface PresetDef {
-  leftSegments: BuiltinStatusLineSegmentId[];
-  rightSegments: BuiltinStatusLineSegmentId[];
+  leftSegments: StatusLineSegmentId[];
+  rightSegments: StatusLineSegmentId[];
   /** Secondary row segments (shown in footer, above sub bar) */
-  secondarySegments?: BuiltinStatusLineSegmentId[];
+  secondarySegments?: StatusLineSegmentId[];
   separator: StatusLineSeparatorStyle;
   segmentOptions?: StatusLineSegmentOptions;
   /** Color scheme for this preset */
+  colors?: ColorScheme;
+}
+
+// User-defined preset (partial, may extend a built-in or another user preset)
+export interface UserPresetDef {
+  extends?: string;
+  leftSegments?: StatusLineSegmentId[];
+  rightSegments?: StatusLineSegmentId[];
+  secondarySegments?: StatusLineSegmentId[];
+  separator?: StatusLineSeparatorStyle;
+  segmentOptions?: StatusLineSegmentOptions;
   colors?: ColorScheme;
 }
 

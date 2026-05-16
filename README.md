@@ -24,7 +24,7 @@ Customizes the default [pi](https://github.com/badlogic/pi-mono) editor with a p
 
 **Smart defaults** — Nerd Font auto-detection for iTerm, WezTerm, Kitty, Ghostty, and Alacritty with ASCII fallbacks. Colors matched to oh-my-pi's dark theme.
 
-**Git integration** — Async status fetching with 1s cache TTL. Automatically invalidates on file writes/edits. Shows branch, staged (+), unstaged (*), and untracked (?) counts.
+**Git integration** — Async status fetching with 1s cache TTL. Automatically invalidates on file writes/edits. Shows branch, staged (+), unstaged (\*), and untracked (?) counts.
 
 **Context awareness** — Color-coded warnings at 70% (yellow) and 90% (red) context usage. During streaming, the context segment refreshes from live assistant usage instead of waiting for the next turn. Auto-compact indicator when enabled. If `pi-custom-compaction` is installed and enabled, the powerline automatically hides native context segments so the footer does not show stale post-summary usage.
 
@@ -65,19 +65,80 @@ You can also set it in `~/.pi/agent/settings.json` or project-local `.pi/setting
 
 Use `"fixedEditor": true` to enable it again. Add `"mouseScroll": false` if you want native terminal selection instead of fixed-editor mouse handling.
 
-| Preset | Description |
-|--------|-------------|
-| `default` | Model, thinking, path (basename), git, context, tokens, cost |
-| `minimal` | Just path (basename), git, context |
-| `compact` | Model, git, cost, context |
-| `full` | Everything including hostname, time, abbreviated path |
-| `nerd` | Maximum detail for Nerd Font users |
-| `ascii` | Safe for any terminal |
+| Preset    | Description                                                                                                                                                               |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `default` | Model, thinking, path (basename), git, context, tokens, cost                                                                                                              |
+| `minimal` | Just path (basename), git, context                                                                                                                                        |
+| `compact` | Model, git, cost, context                                                                                                                                                 |
+| `full`    | Everything including hostname, time, abbreviated path                                                                                                                     |
+| `nerd`    | Maximum detail for Nerd Font users                                                                                                                                        |
+| `ascii`   | Safe for any terminal                                                                                                                                                     |
+| `custom`  | Reserved built-in preset with selectable baseline segments (`model`, `shell_mode`, `path`, `git`, tokens/cost/context); this name cannot be used for user-defined presets |
 
 **Environment:** `POWERLINE_NERD_FONTS=1` to force Nerd Fonts, `=0` for ASCII.
 
 Preset selection is saved to `~/.pi/agent/settings.json` under `powerline` and restored on startup.
 Run `/powerline default` to switch back to the default preset.
+
+### User-defined presets
+
+Define named presets in `powerline.presets` when you want custom layouts without editing `presets.ts`. The selected `powerline.preset` can be either a built-in preset or one of your user-defined preset names. Built-in names always win on conflicts, so use names like `daily`, `work`, or `debug` instead of redefining `default`.
+
+```json
+{
+  "powerline": {
+    "preset": "daily",
+    "presets": {
+      "daily": {
+        "extends": "default",
+        "leftSegments": [
+          "model",
+          "thinking",
+          "shell_mode",
+          "path",
+          "git",
+          "custom:ci"
+        ],
+        "rightSegments": ["context_pct", "cache_read", "cost"],
+        "secondarySegments": ["extension_statuses"],
+        "separator": "powerline-thin",
+        "segmentOptions": {
+          "path": { "mode": "basename" },
+          "git": {
+            "showBranch": true,
+            "showStaged": true,
+            "showUnstaged": true,
+            "showUntracked": true
+          }
+        }
+      }
+    },
+    "customItems": [
+      {
+        "id": "ci",
+        "statusKey": "ci-status",
+        "prefix": "CI",
+        "color": "warning"
+      }
+    ]
+  }
+}
+```
+
+User preset fields:
+
+- `extends` (optional): built-in or user preset to inherit from; defaults to `default`
+- `leftSegments`, `rightSegments`, `secondarySegments` (optional): segment order arrays; omitted arrays inherit from the parent, while `[]` clears that group
+- `separator` (optional): `powerline`, `powerline-thin`, `slash`, `pipe`, `block`, `none`, `ascii`, `dot`, `chevron`, or `star`
+- `segmentOptions` (optional): `model.showThinkingLevel`, `path.mode`, `path.maxLength`, `git.showBranch`, `git.showStaged`, `git.showUnstaged`, `git.showUntracked`, `time.format`, and `time.showSeconds`
+
+Available segment ids: `model`, `thinking`, `shell_mode`, `path`, `git`, `subagents`, `token_in`, `token_out`, `token_total`, `cost`, `context_pct`, `context_total`, `time_spent`, `time`, `session`, `hostname`, `cache_read`, `cache_write`, `extension_statuses`, and `custom:<id>` for a configured custom item.
+
+`leftSegments` and `rightSegments` are concatenated left-to-right into one primary responsive flow; they are not fixed screen-left and screen-right alignment zones. `secondarySegments` are lower-priority segments that can move between rows depending on terminal width.
+
+Custom item placement can be controlled in two places. If a preset includes `custom:<id>` in `leftSegments`, `rightSegments`, or `secondarySegments`, that preset-level placement wins. If no preset segment array references the custom item, `customItems.position` is used as the fallback placement. `customItems.position` is still supported; preset arrays are the more explicit layout control.
+
+When merging global `~/.pi/agent/settings.json` with project-local `.pi/settings.json`, the extension settings loader merges object fields (like `powerline.presets` and `segmentOptions`) field-by-field, but segment arrays (`leftSegments`, `rightSegments`, `secondarySegments`) replace the global arrays. This settings merge is separate from preset `extends` inheritance. Restart pi or start a new session after editing settings, because settings changes are read during startup/session setup.
 
 ### Custom items from extension statuses
 
@@ -161,12 +222,12 @@ In `~/.pi/agent/settings.json`:
 
 Use `Alt+S` / `Option+S` as a quick stash toggle while drafting. It keeps one active stash and clears the editor when stashing.
 
-| Editor | Stash | `Alt+S` result |
-|--------|-------|----------------|
-| Has text | Empty | Stash current text, clear editor |
-| Empty | Has stash | Restore stash into editor |
+| Editor   | Stash     | `Alt+S` result                               |
+| -------- | --------- | -------------------------------------------- |
+| Has text | Empty     | Stash current text, clear editor             |
+| Empty    | Has stash | Restore stash into editor                    |
 | Has text | Has stash | Update stash with current text, clear editor |
-| Empty | Empty | Show "Nothing to stash" |
+| Empty    | Empty     | Show "Nothing to stash"                      |
 
 Auto-restore after an agent run only happens when the editor is still empty. If you typed meanwhile, the stash is preserved.
 
@@ -199,7 +260,7 @@ Selecting an entry inserts it into the editor. If the editor already has text, y
 - `ctrl+alt+,` — jump the fixed-editor chat viewport to the previous LLM message
 - `ctrl+alt+.` — jump the fixed-editor chat viewport to the next LLM message
 - `ctrl+shift+g` — jump the fixed-editor chat viewport to the bottom
-Copy/cut actions do not modify stash state or stash history. Dragging files, folders, images, or screenshots from Finder into the custom editor inserts their path strings. Chat jumps require fixed-editor mode because they use its app-owned scroll viewport. Submitting editor text also returns that viewport to the bottom so new output stays in view.
+  Copy/cut actions do not modify stash state or stash history. Dragging files, folders, images, or screenshots from Finder into the custom editor inserts their path strings. Chat jumps require fixed-editor mode because they use its app-owned scroll viewport. Submitting editor text also returns that viewport to the bottom so new output stays in view.
 
 ### Shortcut configuration
 
@@ -251,24 +312,25 @@ In `~/.pi/agent/settings.json`:
 
 ```json
 {
-  "workingVibe": "star trek",                              // Theme phrase
-  "workingVibeMode": "generate",                           // "generate" (on-demand) or "file" (pre-generated)
-  "workingVibeModel": "openai-codex/gpt-5.4-mini",         // Optional: model to use (default)
-  "workingVibeFallback": "Working",                        // Optional: fallback message
-  "workingVibeRefreshInterval": 30,                        // Optional: seconds between refreshes (default 30)
-  "workingVibePrompt": "Generate a {theme} loading message for: {task}",  // Optional: custom prompt template
-  "workingVibeMaxLength": 65                         // Optional: max message length (default 65)
+  "workingVibe": "star trek", // Theme phrase
+  "workingVibeMode": "generate", // "generate" (on-demand) or "file" (pre-generated)
+  "workingVibeModel": "openai-codex/gpt-5.4-mini", // Optional: model to use (default)
+  "workingVibeFallback": "Working", // Optional: fallback message
+  "workingVibeRefreshInterval": 30, // Optional: seconds between refreshes (default 30)
+  "workingVibePrompt": "Generate a {theme} loading message for: {task}", // Optional: custom prompt template
+  "workingVibeMaxLength": 65 // Optional: max message length (default 65)
 }
 ```
 
 ### Modes
 
-| Mode | Description | Pros | Cons |
-|------|-------------|------|------|
-| `generate` | On-demand AI generation (default) | Contextual, hints at actual task | Model-dependent cost and latency |
-| `file` | Pull from pre-generated file | Instant, zero cost, works offline | Not contextual |
+| Mode       | Description                       | Pros                              | Cons                             |
+| ---------- | --------------------------------- | --------------------------------- | -------------------------------- |
+| `generate` | On-demand AI generation (default) | Contextual, hints at actual task  | Model-dependent cost and latency |
+| `file`     | Pull from pre-generated file      | Instant, zero cost, works offline | Not contextual                   |
 
 **File mode setup:**
+
 ```bash
 /vibe generate mafia 200    # Generate 200 vibes, save to ~/.pi/agent/vibes/mafia.txt
 /vibe mode file             # Switch to file mode
@@ -276,17 +338,20 @@ In `~/.pi/agent/settings.json`:
 ```
 
 **How file mode works:**
+
 1. Vibes are loaded from `~/.pi/agent/vibes/{theme}.txt` into memory
 2. Uses seeded shuffle (Mulberry32 PRNG) — cycles through all vibes before repeating
 3. New seed each session — different order every time you restart pi
 4. Zero latency, zero cost, works offline
 
 **Prompt template variables (generate mode only):**
+
 - `{theme}` — the current vibe theme (e.g., "star trek", "mafia")
 - `{task}` — context hint (user prompt initially, then agent's response text or tool info on refresh)
 - `{exclude}` — recent vibes to avoid (auto-populated, e.g., "Don't use: vibe1, vibe2...")
 
 **How it works:**
+
 1. When you send a message, shows "Channeling {theme}..." placeholder
 2. AI generates a themed message in the background (3s timeout)
 3. Message updates to the themed version (e.g., "Engaging warp drive...")
@@ -297,30 +362,30 @@ In `~/.pi/agent/settings.json`:
 
 The thinking segment shows live updates when you change thinking level:
 
-| Level | Display | Color |
-|-------|---------|-------|
-| off | `think:off` | gray |
-| minimal | `think:min` | purple-gray |
-| low | `think:low` | blue |
-| medium | `think:med` | teal |
-| high | `think:high` | rainbow |
-| xhigh | `think:xhigh` | rainbow |
+| Level   | Display       | Color       |
+| ------- | ------------- | ----------- |
+| off     | `think:off`   | gray        |
+| minimal | `think:min`   | purple-gray |
+| low     | `think:low`   | blue        |
+| medium  | `think:med`   | teal        |
+| high    | `think:high`  | rainbow     |
+| xhigh   | `think:xhigh` | rainbow     |
 
 ## Path Display
 
 The path segment supports three modes:
 
-| Mode | Example | Description |
-|------|---------|-------------|
-| `basename` | `powerline-footer` | Just the directory name (default) |
-| `abbreviated` | `…/extensions/powerline-footer` | Full path with home abbreviated and length limit |
-| `full` | `~/.pi/agent/extensions/powerline-footer` | Complete path with home abbreviated |
+| Mode          | Example                                   | Description                                      |
+| ------------- | ----------------------------------------- | ------------------------------------------------ |
+| `basename`    | `powerline-footer`                        | Just the directory name (default)                |
+| `abbreviated` | `…/extensions/powerline-footer`           | Full path with home abbreviated and length limit |
+| `full`        | `~/.pi/agent/extensions/powerline-footer` | Complete path with home abbreviated              |
 
 Configure via preset options: `path: { mode: "full" }`
 
 ## Segments
 
-`model` · `thinking` · `shell_mode` · `path` · `git` · `subagents` · `token_in` · `token_out` · `token_total` · `cost` · `context_pct` · `context_total` · `time_spent` · `time` · `session` · `hostname` · `cache_read` · `cache_write`
+`model` · `thinking` · `shell_mode` · `path` · `git` · `subagents` · `token_in` · `token_out` · `token_total` · `cost` · `context_pct` · `context_total` · `time_spent` · `time` · `session` · `hostname` · `cache_read` · `cache_write` · `extension_statuses`
 
 ## Separators
 
@@ -332,22 +397,22 @@ Colors are configurable via pi's theme system. Each preset defines its own color
 
 ### Default Colors
 
-| Semantic | Theme Color | Description |
-|----------|-------------|-------------|
-| `model` | `#d787af` | Model name |
-| `shellMode` | `accent` | Bash mode segment |
-| `path` | `#00afaf` | Directory path |
-| `gitClean` | `success` | Git branch (clean) |
-| `gitDirty` | `warning` | Git branch (dirty) |
-| `thinking` | `thinkingOff` | Thinking level (`off`) |
+| Semantic          | Theme Color       | Description                |
+| ----------------- | ----------------- | -------------------------- |
+| `model`           | `#d787af`         | Model name                 |
+| `shellMode`       | `accent`          | Bash mode segment          |
+| `path`            | `#00afaf`         | Directory path             |
+| `gitClean`        | `success`         | Git branch (clean)         |
+| `gitDirty`        | `warning`         | Git branch (dirty)         |
+| `thinking`        | `thinkingOff`     | Thinking level (`off`)     |
 | `thinkingMinimal` | `thinkingMinimal` | Thinking level (`minimal`) |
-| `thinkingLow` | `thinkingLow` | Thinking level (`low`) |
-| `thinkingMedium` | `thinkingMedium` | Thinking level (`medium`) |
-| `context` | `dim` | Context usage |
-| `contextWarn` | `warning` | Context usage >70% |
-| `contextError` | `error` | Context usage >90% |
-| `cost` | `text` | Cost display |
-| `tokens` | `muted` | Token counts |
+| `thinkingLow`     | `thinkingLow`     | Thinking level (`low`)     |
+| `thinkingMedium`  | `thinkingMedium`  | Thinking level (`medium`)  |
+| `context`         | `dim`             | Context usage              |
+| `contextWarn`     | `warning`         | Context usage >70%         |
+| `contextError`    | `error`           | Context usage >90%         |
+| `cost`            | `text`            | Cost display               |
+| `tokens`          | `muted`           | Token counts               |
 
 ### Custom Theme Override
 
@@ -374,6 +439,7 @@ Create `~/.pi/agent/extensions/powerline-footer/theme.json`:
 ```
 
 Colors can be:
+
 - **Theme color names**: `accent`, `muted`, `dim`, `text`, `success`, `warning`, `error`, `border`, `borderAccent`, `borderMuted`
 - **Hex colors**: `#ff5500`, `#d787af`
 

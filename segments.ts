@@ -474,7 +474,7 @@ function renderCustomSegment(id: `custom:${string}`, ctx: SegmentContext): Rende
 
 export function renderSegment(id: StatusLineSegmentId, ctx: SegmentContext): RenderedSegment {
   if (id.startsWith("custom:")) {
-    return renderCustomSegment(id, ctx);
+    return renderCustomSegment(id as `custom:${string}`, ctx);
   }
 
   const segment = SEGMENTS[id];

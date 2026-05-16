@@ -10,7 +10,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 
-import type { ColorScheme, SegmentContext, StatusLinePreset, StatusLineSegmentId } from "./types.ts";
+import type { ColorScheme, PresetDef, SegmentContext, StatusLinePreset, StatusLineSegmentId } from "./types.ts";
 import type { PowerlineConfig } from "./powerline-config.ts";
 import { BashTranscriptStore } from "./bash-mode/transcript.ts";
 import {
@@ -24,8 +24,8 @@ import { BashModeEditor } from "./bash-mode/editor.ts";
 import { ManagedShellSession } from "./bash-mode/shell-session.ts";
 import { matchHistoryEntries, readGlobalShellHistory, readProjectHistory, appendProjectHistory } from "./bash-mode/history.ts";
 import type { BashModeSettings } from "./bash-mode/types.ts";
-import { getPreset, PRESETS } from "./presets.ts";
-import { collectHiddenExtensionStatusKeys, getNotificationExtensionStatuses, mergeSegmentsWithCustomItems, nextPowerlineSettingWithOptions, nextPowerlineSettingWithPreset, parsePowerlineConfig } from "./powerline-config.ts";
+import { PRESETS } from "./presets.ts";
+import { collectHiddenExtensionStatusKeys, getNotificationExtensionStatuses, mergeSegmentsWithCustomItems, nextPowerlineSettingWithOptions, nextPowerlineSettingWithPreset, parsePowerlineConfig, resolvePresetDef } from "./powerline-config.ts";
 import { getSeparator } from "./separators.ts";
 import { renderSegment } from "./segments.ts";
 import { getGitStatus, invalidateGitStatus, invalidateGitBranch } from "./git-status.ts";
@@ -66,6 +66,7 @@ import {
 
 let config: PowerlineConfig = {
   preset: "default",
+  presets: {},
   customItems: [],
   mouseScroll: true,
   fixedEditor: true,
@@ -619,7 +620,7 @@ function writePowerlineSetting(cwd: string, update: (existingPowerlineSetting: u
   }
 }
 
-function writePowerlinePresetSetting(preset: StatusLinePreset, cwd: string = process.cwd()): boolean {
+function writePowerlinePresetSetting(preset: string, cwd: string = process.cwd()): boolean {
   return writePowerlineSetting(cwd, (existingPowerlineSetting) => (
     nextPowerlineSettingWithPreset(existingPowerlineSetting, preset)
   ));
@@ -628,7 +629,7 @@ function writePowerlinePresetSetting(preset: StatusLinePreset, cwd: string = pro
 function writePowerlineOptionSetting(
   cwd: string,
   updates: Partial<Pick<PowerlineConfig, "mouseScroll" | "fixedEditor">>,
-  currentPreset: StatusLinePreset,
+  currentPreset: string,
 ): boolean {
   return writePowerlineSetting(cwd, (existingPowerlineSetting) => (
     nextPowerlineSettingWithOptions(existingPowerlineSetting, updates, currentPreset)
@@ -637,17 +638,21 @@ function writePowerlineOptionSetting(
 
 const PRESET_NAMES = Object.keys(PRESETS) as StatusLinePreset[];
 
-function isValidPreset(value: unknown): value is StatusLinePreset {
-  return typeof value === "string" && Object.prototype.hasOwnProperty.call(PRESETS, value);
+function isValidPreset(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  return Object.prototype.hasOwnProperty.call(PRESETS, value) || Object.prototype.hasOwnProperty.call(config.presets, value);
 }
 
-function normalizePreset(value: unknown): StatusLinePreset | null {
+function normalizePreset(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
   }
 
-  const preset = value.trim().toLowerCase();
-  return isValidPreset(preset) ? preset : null;
+  const preset = value.trim();
+  if (isValidPreset(preset)) return preset;
+
+  const builtInPreset = preset.toLowerCase();
+  return Object.prototype.hasOwnProperty.call(PRESETS, builtInPreset) ? builtInPreset : null;
 }
 
 function hasNonWhitespaceText(text: string): boolean {
@@ -862,7 +867,7 @@ function renderSegmentWithWidth(
 /** Build content string from pre-rendered parts */
 function buildContentFromParts(
   parts: string[],
-  presetDef: ReturnType<typeof getPreset>
+  presetDef: PresetDef
 ): string {
   if (parts.length === 0) return "";
   const separatorDef = getSeparator(presetDef.separator);
@@ -878,7 +883,7 @@ function buildContentFromParts(
  */
 function computeResponsiveLayout(
   ctx: SegmentContext,
-  presetDef: ReturnType<typeof getPreset>,
+  presetDef: PresetDef,
   availableWidth: number
 ): { topContent: string; secondaryContent: string } {
   const separatorDef = getSeparator(presetDef.separator);
@@ -907,8 +912,8 @@ function computeResponsiveLayout(
   // Account for: leading space (1) + trailing space (1) = 2 chars overhead
   const baseOverhead = 2;
   let currentWidth = baseOverhead;
-  let topSegments: string[] = [];
-  let overflowSegments: { content: string; width: number }[] = [];
+  const topSegments: string[] = [];
+  const overflowSegments: { content: string; width: number }[] = [];
   let overflow = false;
   
   for (const seg of renderedSegments) {
@@ -926,7 +931,7 @@ function computeResponsiveLayout(
   // Fit overflow segments into secondary row (same width constraint)
   // Stop at first non-fitting segment to preserve ordering
   let secondaryWidth = baseOverhead;
-  let secondarySegments: string[] = [];
+  const secondarySegments: string[] = [];
   
   for (const seg of overflowSegments) {
     const neededWidth = seg.width + (secondarySegments.length > 0 ? sepWidth : 0);
@@ -1807,7 +1812,9 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       }
 
       // Show available presets
-      const presetList = Object.keys(PRESETS).join(", ");
+      const builtInNames = Object.keys(PRESETS);
+      const userNames = Object.keys(config.presets).filter((n) => !builtInNames.includes(n));
+      const presetList = [...builtInNames, ...userNames].join(", ");
       ctx.ui.notify(`Available presets: ${presetList}`, "info");
     },
   });
@@ -2047,7 +2054,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
   });
 
   function buildSegmentContext(ctx: any, theme: Theme): SegmentContext {
-    const presetDef = getPreset(config.preset);
+    const presetDef = resolvePresetDef(config, PRESETS);
     const colors: ColorScheme = presetDef.colors ?? getDefaultColors();
 
     // Build usage stats and get thinking level from session
@@ -2152,7 +2159,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       }
     }
     
-    const presetDef = getPreset(config.preset);
+    const presetDef = resolvePresetDef(config, PRESETS);
     const segmentCtx = buildSegmentContext(currentCtx, theme);
     
     lastLayoutWidth = width;
