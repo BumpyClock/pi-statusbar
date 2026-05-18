@@ -46,24 +46,26 @@ Restart pi to activate.
 
 Activates automatically. Toggle with `/statusbar`, switch presets with `/statusbar <name>`, fixed-editor mode with `/statusbar fixed-editor on|off|toggle`, and wheel mode with `/statusbar mouse-scroll on|off|toggle`.
 
-Fixed editor is on by default.
+Fixed editor and mouse-scroll handling are both on by default.
 
 - `/statusbar fixed-editor off` — return to Pi’s regular scrolling layout
 - `/statusbar fixed-editor on` — re-enable the fixed editor
 - `/statusbar fixed-editor toggle` — switch between the two
+- `/statusbar mouse-scroll off` — keep fixed editor on, but let the terminal handle native selection
 
-You can also set it in `~/.pi/agent/settings.json` or project-local `.pi/settings.json`:
+You can also set the defaults explicitly in `~/.pi/agent/settings.json` or project-local `.pi/settings.json`:
 
 ```json
 {
   "statusbar": {
     "preset": "default",
-    "fixedEditor": false
+    "fixedEditor": true,
+    "mouseScroll": true
   }
 }
 ```
 
-Use `"fixedEditor": true` to enable it again. Add `"mouseScroll": false` if you want native terminal selection instead of fixed-editor mouse handling.
+Set `"fixedEditor": false` to return to Pi’s regular scrolling layout. Set `"mouseScroll": false` if you want native terminal selection instead of fixed-editor mouse handling.
 
 | Preset    | Description                                                                                                                                                               |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
