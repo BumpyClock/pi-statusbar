@@ -91,20 +91,21 @@ import {
 } from "./shortcuts.ts";
 import {
 	initVibeManager,
+	updateVibeConfig,
+	disposeVibeManager,
 	onVibeBeforeAgentStart,
 	onVibeAgentStart,
 	onVibeAgentEnd,
 	onVibeToolCall,
-	getVibeTheme,
-	setVibeTheme,
-	getVibeModel,
-	setVibeModel,
-	getVibeMode,
-	setVibeMode,
-	hasVibeFile,
-	getVibeFileCount,
-	generateVibesBatch,
 } from "./working-vibes.ts";
+import {
+	parseVibeConfig,
+	nextStatusbarVibeSetting,
+	nextVibeSetting,
+	DEFAULT_GENERATED_VIBE_PROMPT,
+	type VibeConfig,
+} from "./vibe-config.ts";
+import { BUILTIN_VIBE_PACKS, getBuiltinVibePackIds } from "./vibe-packs.ts";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Configuration
@@ -116,6 +117,7 @@ let config: StatusbarConfig = {
 	customItems: [],
 	mouseScroll: true,
 	fixedEditor: true,
+	vibe: parseVibeConfig(undefined),
 };
 
 const CUSTOM_COMPACTION_STATUS_KEY = "compact-policy";
@@ -770,10 +772,7 @@ function writeStatusbarSetting(
 		return false;
 	}
 
-	const writeToProject = Object.prototype.hasOwnProperty.call(
-		projectSettings,
-		"statusbar",
-	);
+	const writeToProject = Object.hasOwn(projectSettings, "statusbar");
 	const settingsPath = writeToProject
 		? projectSettingsPath
 		: globalSettingsPath;
@@ -817,14 +816,48 @@ function writeStatusbarOptionSetting(
 	);
 }
 
+/**
+ * Write a vibe config update to `statusbar.vibe` and update in-memory state.
+ *
+ * Uses {@link nextStatusbarVibeSetting} to preserve existing shorthand preset
+ * strings (e.g. `"whimsical"`) and inherited effective config when the raw
+ * setting isn't a full vibe object.
+ *
+ * Returns `true` if persisted to disk.
+ */
+function writeVibeSettingAndUpdate(
+	cwd: string,
+	updates: Partial<Omit<VibeConfig, "generated">> & {
+		generated?: Partial<VibeConfig["generated"]>;
+	},
+): boolean {
+	const persisted = writeStatusbarSetting(cwd, (existing) =>
+		nextStatusbarVibeSetting(existing, updates, config.vibe),
+	);
+	// Always update in-memory config regardless of persistence
+	config.vibe = parseVibeConfig(nextVibeSetting(config.vibe, updates));
+	updateVibeConfig(config.vibe);
+	return persisted;
+}
+
+/** Notify user of vibe command result with persistence status. */
+function notifyVibe(
+	ctx: { ui: { notify: (msg: string, level: string) => void } },
+	persisted: boolean,
+	message: string,
+): void {
+	if (persisted) {
+		ctx.ui.notify(message, "info");
+	} else {
+		ctx.ui.notify(`${message} (not persisted; check settings.json)`, "warning");
+	}
+}
+
 const PRESET_NAMES = Object.keys(PRESETS) as StatusLinePreset[];
 
 function isValidPreset(value: unknown): boolean {
 	if (typeof value !== "string") return false;
-	return (
-		Object.prototype.hasOwnProperty.call(PRESETS, value) ||
-		Object.prototype.hasOwnProperty.call(config.presets, value)
-	);
+	return Object.hasOwn(PRESETS, value) || Object.hasOwn(config.presets, value);
 }
 
 function normalizePreset(value: unknown): string | null {
@@ -836,9 +869,7 @@ function normalizePreset(value: unknown): string | null {
 	if (isValidPreset(preset)) return preset;
 
 	const builtInPreset = preset.toLowerCase();
-	return Object.prototype.hasOwnProperty.call(PRESETS, builtInPreset)
-		? builtInPreset
-		: null;
+	return Object.hasOwn(PRESETS, builtInPreset) ? builtInPreset : null;
 }
 
 function hasNonWhitespaceText(text: string): boolean {
@@ -1516,8 +1547,8 @@ export default function statusbar(pi: ExtensionAPI) {
 			ctx.ui.setStatus("stash", undefined);
 		}
 
-		// Initialize vibe manager (needs modelRegistry from ctx)
-		initVibeManager(ctx);
+		// Initialize vibe manager with parsed config
+		initVibeManager(ctx, config.vibe);
 
 		if (enabled && ctx.hasUI) {
 			setupCustomEditor(ctx);
@@ -1549,6 +1580,9 @@ export default function statusbar(pi: ExtensionAPI) {
 		shellSession?.dispose();
 		shellSession = null;
 		bashModeActive = false;
+		disposeVibeManager(
+			currentCtx?.hasUI ? currentCtx.ui.setWorkingMessage : undefined,
+		);
 		currentCtx = null;
 		footerDataRef = null;
 		getThinkingLevelFn = null;
@@ -2329,148 +2363,213 @@ export default function statusbar(pi: ExtensionAPI) {
 		});
 	}
 
-	// Command to set working message theme
+	// ── /vibe command ─────────────────────────────────────────────────────
+	// Subcommands: off, preset whimsical, source packs|generated, generate <theme>,
+	// pack list|enable|disable|reset, safe on|off, animation shimmer|none.
+	// Writes go through writeVibeSettingAndUpdate which preserves existing
+	// statusbar structure (shorthand preset, inherited vibe) on disk.
 	pi.registerCommand("vibe", {
 		description:
-			"Set working message theme. Usage: /vibe [theme|off|mode|model|generate]",
+			"Manage working message vibes. Usage: /vibe [off|preset|source|generate|pack|safe|animation]",
 		handler: async (args, ctx) => {
 			const parts = args?.trim().split(/\s+/) || [];
-			const subcommand = parts[0]?.toLowerCase();
+			const subcommand = parts[0]?.toLowerCase() ?? "";
 
-			// No args: show current status
+			// /vibe (no args): show current status
 			if (!args || !args.trim()) {
-				const theme = getVibeTheme();
-				const mode = getVibeMode();
-				const model = getVibeModel();
-				let status = `Vibe: ${theme || "off"} | Mode: ${mode} | Model: ${model}`;
-				if (theme && mode === "file") {
-					const count = getVibeFileCount(theme);
-					status +=
-						count > 0 ? ` | File: ${count} vibes` : " | File: not found";
+				const v = config.vibe;
+				if (!v.enabled) {
+					ctx.ui.notify("Vibe: off", "info");
+					return;
+				}
+				const allPacks = getBuiltinVibePackIds();
+				const enabledCount = allPacks.length - v.disabledPacks.length;
+				let status = `Vibe: ${v.source} | Animation: ${v.animation} | Safe: ${v.safeMode ? "on" : "off"} | Packs: ${enabledCount}/${allPacks.length}`;
+				if (v.source === "generated") {
+					status += ` | Model: ${v.generated.model}`;
 				}
 				ctx.ui.notify(status, "info");
 				return;
 			}
 
-			// /vibe model [spec] - show or set model
-			if (subcommand === "model") {
-				const modelSpec = parts.slice(1).join(" ");
-				if (!modelSpec) {
-					ctx.ui.notify(`Current vibe model: ${getVibeModel()}`, "info");
-					return;
-				}
-				// Validate format (provider/modelId)
-				if (!modelSpec.includes("/")) {
-					ctx.ui.notify(
-						"Invalid model format. Use: provider/modelId (e.g., openai-codex/gpt-5.4-mini)",
-						"error",
-					);
-					return;
-				}
-				const persisted = setVibeModel(modelSpec);
-				if (persisted) {
-					ctx.ui.notify(`Vibe model set to: ${modelSpec}`, "info");
-				} else {
-					ctx.ui.notify(
-						`Vibe model set to: ${modelSpec} (not persisted; check settings.json)`,
-						"warning",
-					);
-				}
-				return;
-			}
-
-			// /vibe mode [generate|file] - show or set mode
-			if (subcommand === "mode") {
-				const newMode = parts[1]?.toLowerCase();
-				if (!newMode) {
-					ctx.ui.notify(`Current vibe mode: ${getVibeMode()}`, "info");
-					return;
-				}
-				if (newMode !== "generate" && newMode !== "file") {
-					ctx.ui.notify("Invalid mode. Use: generate or file", "error");
-					return;
-				}
-				// Check if file exists when switching to file mode
-				const theme = getVibeTheme();
-				if (newMode === "file" && theme && !hasVibeFile(theme)) {
-					ctx.ui.notify(
-						`No vibe file for "${theme}". Run /vibe generate ${theme} first`,
-						"error",
-					);
-					return;
-				}
-				const persisted = setVibeMode(newMode);
-				if (persisted) {
-					ctx.ui.notify(`Vibe mode set to: ${newMode}`, "info");
-				} else {
-					ctx.ui.notify(
-						`Vibe mode set to: ${newMode} (not persisted; check settings.json)`,
-						"warning",
-					);
-				}
-				return;
-			}
-
-			// /vibe generate <theme> [count] - generate vibes and save to file
-			if (subcommand === "generate") {
-				const theme = parts[1];
-				const parsedCount = Number.parseInt(parts[2] ?? "", 10);
-				const count = Number.isFinite(parsedCount)
-					? Math.min(Math.max(Math.floor(parsedCount), 1), 500)
-					: 100;
-
-				if (!theme) {
-					ctx.ui.notify("Usage: /vibe generate <theme> [count]", "error");
-					return;
-				}
-
-				ctx.ui.notify(`Generating ${count} vibes for "${theme}"...`, "info");
-
-				const result = await generateVibesBatch(theme, count);
-
-				if (result.success) {
-					ctx.ui.notify(
-						`Generated ${result.count} vibes for "${theme}" → ${result.filePath}`,
-						"info",
-					);
-				} else {
-					ctx.ui.notify(`Failed to generate vibes: ${result.error}`, "error");
-				}
-				return;
-			}
-
-			// /vibe off - disable
+			// /vibe off
 			if (subcommand === "off") {
-				const persisted = setVibeTheme(null);
-				if (persisted) {
-					ctx.ui.notify("Vibe disabled", "info");
-				} else {
-					ctx.ui.notify(
-						"Vibe disabled (not persisted; check settings.json)",
-						"warning",
-					);
-				}
+				const persisted = writeVibeSettingAndUpdate(ctx.cwd, {
+					enabled: false,
+				});
+				disposeVibeManager(ctx.ui.setWorkingMessage);
+				notifyVibe(ctx, persisted, "Vibe disabled");
 				return;
 			}
 
-			// /vibe <theme> - set theme (preserve original casing)
-			const theme = args.trim();
-			const persisted = setVibeTheme(theme);
-			const mode = getVibeMode();
-			if (mode === "file" && !hasVibeFile(theme)) {
-				const suffix = persisted ? "" : " (not persisted; check settings.json)";
-				ctx.ui.notify(
-					`Vibe set to: ${theme} (file mode, but no file found - run /vibe generate ${theme})${suffix}`,
-					"warning",
-				);
-			} else if (persisted) {
-				ctx.ui.notify(`Vibe set to: ${theme}`, "info");
-			} else {
-				ctx.ui.notify(
-					`Vibe set to: ${theme} (not persisted; check settings.json)`,
-					"warning",
-				);
+			// /vibe preset whimsical
+			if (subcommand === "preset") {
+				const presetName = parts[1]?.toLowerCase();
+				if (presetName !== "whimsical") {
+					ctx.ui.notify("Usage: /vibe preset whimsical", "error");
+					return;
+				}
+				const persisted = writeVibeSettingAndUpdate(ctx.cwd, {
+					enabled: true,
+					source: "packs",
+					disabledPacks: [],
+					safeMode: true,
+					animation: "shimmer",
+				});
+				notifyVibe(ctx, persisted, "Vibe preset: whimsical");
+				return;
 			}
+
+			// /vibe source packs|generated
+			if (subcommand === "source") {
+				const src = parts[1]?.toLowerCase();
+				if (src !== "packs" && src !== "generated") {
+					ctx.ui.notify("Usage: /vibe source packs|generated", "error");
+					return;
+				}
+				const persisted = writeVibeSettingAndUpdate(ctx.cwd, {
+					enabled: true,
+					source: src,
+				});
+				notifyVibe(ctx, persisted, `Vibe source: ${src}`);
+				return;
+			}
+
+			// /vibe generate <theme>
+			if (subcommand === "generate") {
+				const theme = parts.slice(1).join(" ");
+				if (!theme) {
+					ctx.ui.notify("Usage: /vibe generate <theme>", "error");
+					return;
+				}
+				const persisted = writeVibeSettingAndUpdate(ctx.cwd, {
+					enabled: true,
+					source: "generated",
+					generated: {
+						prompt: DEFAULT_GENERATED_VIBE_PROMPT.replace(/\{theme\}/g, theme),
+					},
+				});
+				notifyVibe(ctx, persisted, `Vibe generate theme: ${theme}`);
+				return;
+			}
+
+			// /vibe pack list|enable|disable|reset
+			if (subcommand === "pack") {
+				const packCmd = parts[1]?.toLowerCase();
+
+				if (packCmd === "list" || !packCmd) {
+					const packs = BUILTIN_VIBE_PACKS;
+					const disabled = new Set(config.vibe.disabledPacks);
+					const lines = packs.map(
+						(p) =>
+							`${disabled.has(p.id) ? "✗" : "✓"} ${p.id} (${p.label}, ${p.messages.length} msgs)`,
+					);
+					ctx.ui.notify(lines.join("\n"), "info");
+					return;
+				}
+
+				if (packCmd === "disable") {
+					const packId = parts[2]?.toLowerCase();
+					const validIds = getBuiltinVibePackIds();
+					if (!packId || !validIds.includes(packId)) {
+						ctx.ui.notify(
+							`Usage: /vibe pack disable <pack-id>\nAvailable: ${validIds.join(", ")}`,
+							"error",
+						);
+						return;
+					}
+					const disabled = new Set(config.vibe.disabledPacks);
+					if (disabled.has(packId)) {
+						ctx.ui.notify(`Pack "${packId}" already disabled`, "info");
+						return;
+					}
+					const persisted = writeVibeSettingAndUpdate(ctx.cwd, {
+						disabledPacks: [...config.vibe.disabledPacks, packId],
+					});
+					notifyVibe(ctx, persisted, `Pack disabled: ${packId}`);
+					return;
+				}
+
+				if (packCmd === "enable") {
+					const packId = parts[2]?.toLowerCase();
+					const validIds = getBuiltinVibePackIds();
+					if (!packId || !validIds.includes(packId)) {
+						ctx.ui.notify(
+							`Usage: /vibe pack enable <pack-id>\nAvailable: ${validIds.join(", ")}`,
+							"error",
+						);
+						return;
+					}
+					const persisted = writeVibeSettingAndUpdate(ctx.cwd, {
+						disabledPacks: config.vibe.disabledPacks.filter(
+							(id) => id !== packId,
+						),
+					});
+					notifyVibe(ctx, persisted, `Pack enabled: ${packId}`);
+					return;
+				}
+
+				if (packCmd === "reset") {
+					const persisted = writeVibeSettingAndUpdate(ctx.cwd, {
+						disabledPacks: [],
+					});
+					notifyVibe(ctx, persisted, "All packs enabled");
+					return;
+				}
+
+				ctx.ui.notify("Usage: /vibe pack [list|enable|disable|reset]", "error");
+				return;
+			}
+
+			// /vibe safe on|off
+			if (subcommand === "safe") {
+				const mode = parts[1]?.toLowerCase();
+				if (mode !== "on" && mode !== "off") {
+					ctx.ui.notify("Usage: /vibe safe on|off", "error");
+					return;
+				}
+				const persisted = writeVibeSettingAndUpdate(ctx.cwd, {
+					safeMode: mode === "on",
+				});
+				notifyVibe(ctx, persisted, `Safe mode: ${mode}`);
+				return;
+			}
+
+			// /vibe animation shimmer|none
+			if (subcommand === "animation") {
+				const anim = parts[1]?.toLowerCase();
+				if (anim !== "shimmer" && anim !== "none") {
+					ctx.ui.notify("Usage: /vibe animation shimmer|none", "error");
+					return;
+				}
+				const persisted = writeVibeSettingAndUpdate(ctx.cwd, {
+					animation: anim,
+				});
+				notifyVibe(ctx, persisted, `Vibe animation: ${anim}`);
+				return;
+			}
+
+			// Legacy command redirects
+			if (subcommand === "mode") {
+				ctx.ui.notify(
+					"/vibe mode removed. Use: /vibe source packs|generated",
+					"warning",
+				);
+				return;
+			}
+			if (subcommand === "model") {
+				ctx.ui.notify(
+					"/vibe model removed. Edit statusbar.vibe.generated.model in settings.json",
+					"warning",
+				);
+				return;
+			}
+
+			// Unknown subcommand
+			ctx.ui.notify(
+				"Usage: /vibe [off|preset|source|generate|pack|safe|animation]",
+				"error",
+			);
 		},
 	});
 

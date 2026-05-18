@@ -8,6 +8,7 @@
 
 ### Changed
 
+- **Pack-based vibe architecture** — Vibes now use built-in curated message packs (whimsical: star-wars, star-trek, etc.) as the default source, configured under `statusbar.vibe`. New commands include: `/vibe`, `/vibe preset whimsical`, `/vibe pack list|disable|reset`, `/vibe safe on|off`, `/vibe animation shimmer|none`, `/vibe source packs|generated`, `/vibe generate <theme>`, and `/vibe off`. Safe mode filters unsafe messages (default: on). Shimmer animation enabled by default. Standalone `pi-whimsical` extension can be retired after integration. Legacy top-level `workingVibe*` settings replaced by `statusbar.vibe`.
 - **Package rename** — Renamed the npm package to `@bumpyclock/pi-statusbar`, the settings key to `statusbar`, shortcut settings to `statusbarShortcuts`, and the slash command to `/statusbar`. This is a clean breaking change with no `powerline` config or command aliases.
 - **Migration** — Replace `pi-powerline-footer` with `@bumpyclock/pi-statusbar`, `powerline` with `statusbar`, `powerlineShortcuts` with `statusbarShortcuts`, and `/powerline` with `/statusbar` in settings, shortcut entries, scripts, and docs.
 

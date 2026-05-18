@@ -4,7 +4,7 @@
 
 # pi-statusbar
 
-Customizes the default [pi](https://github.com/badlogic/pi-mono) editor with a powerline-style status bar, welcome overlay, and AI-generated "vibes" for loading messages. Inspired by [Powerlevel10k](https://github.com/romkatv/powerlevel10k) and [oh-my-pi](https://github.com/can1357/oh-my-pi).
+Customizes the default [pi](https://github.com/badlogic/pi-mono) editor with a powerline-style status bar, welcome overlay, and built-in or AI-generated "vibes" for loading messages. Inspired by [Powerlevel10k](https://github.com/romkatv/powerlevel10k) and [oh-my-pi](https://github.com/can1357/oh-my-pi).
 
 <img width="1261" height="817" alt="Image" src="https://github.com/user-attachments/assets/4cc43320-3fb8-4503-b857-69dffa7028f2" />
 
@@ -12,7 +12,7 @@ Customizes the default [pi](https://github.com/badlogic/pi-mono) editor with a p
 
 **Editor stash** — Press `Alt+S` to save your editor content and clear the editor, type a quick prompt, and your stashed text auto-restores when the agent finishes. Toggles between stash, pop, and update-existing-stash. A `stash` indicator appears in the statusbar while text is stashed.
 
-**Working Vibes** — AI-generated themed loading messages. Set `/vibe star trek` and your "Working..." becomes "Running diagnostics..." or "Engaging warp drive...". Supports any theme: pirate, zen, noir, cowboy, etc.
+**Working Vibes** — Themed loading messages from built-in packs (whimsical: star-wars, star-trek, etc.) or AI-generated. Set the vibe preset with `/vibe preset whimsical` for instant themed messages, or `/vibe source generated` for contextual AI vibes. Safe mode on by default, shimmer animation included.
 
 **Welcome overlay** — Branded splash screen shown as centered overlay on startup. Shows gradient logo, model info, keyboard tips, loaded AGENTS.md/extensions/skills/templates counts, and recent sessions. Auto-dismisses after 30 seconds or on any key press.
 
@@ -289,74 +289,71 @@ After changing bindings, run `/reload`. Invalid bindings, reserved key conflicts
 
 ## Working Vibes
 
-Transform boring "Working..." messages into themed phrases that match your style:
+Transform boring "Working..." messages into themed phrases that match your style. Vibes are configured entirely under `statusbar.vibe` in settings — if you previously used the standalone `pi-whimsical` extension, it can be retired or disabled after enabling vibes here.
 
-```
-/vibe star trek    → "Running diagnostics...", "Engaging warp drive..."
-/vibe pirate       → "Hoisting the sails...", "Charting course..."
-/vibe zen          → "Breathing deeply...", "Finding balance..."
-/vibe noir         → "Following the trail...", "Checking the angles..."
-/vibe              → Shows current theme, mode, and model
-/vibe off          → Disables (back to "Working...")
-/vibe model        → Shows current model
-/vibe model openai/gpt-4o-mini → Use a different model
-/vibe mode         → Shows current mode (generate or file)
-/vibe mode file    → Switch to file-based mode (instant, no API calls)
-/vibe mode generate → Switch to on-demand generation (contextual)
-/vibe generate mafia 200 → Pre-generate 200 vibes and save to file
+### Commands
+
+Vibe presets are named bundles of packs; `whimsical` is the only built-in vibe preset and enables every built-in pack. This is separate from statusbar layout presets such as `default`, `minimal`, and `compact`. Packs are individual themed message sets such as `star-wars` or `star-trek`. Themes are freeform strings used by the AI-generated prompt; `/vibe generate <theme>` stores that theme for future generated vibes.
+
+```bash
+/vibe preset whimsical       → Activate the built-in whimsical vibe preset
+/vibe pack list              → Show available packs and disabled status
+/vibe pack disable star-wars → Disable a specific pack
+/vibe pack enable star-wars  → Re-enable a specific pack
+/vibe pack reset             → Re-enable all packs
+/vibe safe on|off            → Toggle safe mode (filters unsafe messages, default: on)
+/vibe animation shimmer|none → Shimmer animation on working message (default: shimmer)
+/vibe source generated       → Switch to AI-generated vibes
+/vibe generate star trek     → Set AI-generated vibe theme/source to "star trek"
+/vibe source packs           → Switch back to built-in packs
+/vibe off                    → Disable vibes entirely (back to "Working...")
+/vibe                        → Show current status
 ```
 
 ### Configuration
 
-In `~/.pi/agent/settings.json`:
+In `~/.pi/agent/settings.json` under `statusbar.vibe`:
 
 ```json
 {
-  "workingVibe": "star trek", // Theme phrase
-  "workingVibeMode": "generate", // "generate" (on-demand) or "file" (pre-generated)
-  "workingVibeModel": "openai-codex/gpt-5.4-mini", // Optional: model to use (default)
-  "workingVibeFallback": "Working", // Optional: fallback message
-  "workingVibeRefreshInterval": 30, // Optional: seconds between refreshes (default 30)
-  "workingVibePrompt": "Generate a {theme} loading message for: {task}", // Optional: custom prompt template
-  "workingVibeMaxLength": 65 // Optional: max message length (default 65)
+  "statusbar": {
+    "vibe": {
+      "source": "packs",
+      "disabledPacks": ["star-wars"],
+      "safeMode": true,
+      "animation": "shimmer",
+      "generated": {
+        "model": "openai-codex/gpt-5.4-mini",
+        "refreshInterval": 30,
+        "prompt": "Generate a 2-4 word {theme} themed loading message for: {task}"
+      }
+    }
+  }
 }
 ```
 
-### Modes
+### Sources
 
-| Mode       | Description                       | Pros                              | Cons                             |
-| ---------- | --------------------------------- | --------------------------------- | -------------------------------- |
-| `generate` | On-demand AI generation (default) | Contextual, hints at actual task  | Model-dependent cost and latency |
-| `file`     | Pull from pre-generated file      | Instant, zero cost, works offline | Not contextual                   |
+| Source      | Description                    | Pros                              | Cons                             |
+| ----------- | ------------------------------ | --------------------------------- | -------------------------------- |
+| `packs`     | Built-in curated message packs | Instant, zero cost, works offline | Not contextual                   |
+| `generated` | On-demand AI generation        | Contextual, hints at actual task  | Model-dependent cost and latency |
 
-**File mode setup:**
+**Pack source** (`source: "packs"`) uses curated message sets, each with a distinct theme (star-wars, star-trek, etc.). Messages tagged `unsafe` are filtered when safe mode is on (the default). A message is tagged or treated as unsafe when the shared profanity matcher catches obvious or obfuscated profanity (`fuck`, `f***ing`, `shit`, `bitch`, `bullshit`, `dick`, `goddamn`). Tags are applied automatically at pack definition time and checked again at runtime; safe mode removes those messages from the pick pool. Disable individual packs with `/vibe pack disable <id>`, re-enable one with `/vibe pack enable <id>`, or re-enable all with `/vibe pack reset`.
 
-```bash
-/vibe generate mafia 200    # Generate 200 vibes, save to ~/.pi/agent/vibes/mafia.txt
-/vibe mode file             # Switch to file mode
-/vibe mafia                 # Now uses the file
-```
+**Generated source** calls an AI model on each refresh. Prompt template variables:
 
-**How file mode works:**
-
-1. Vibes are loaded from `~/.pi/agent/vibes/{theme}.txt` into memory
-2. Uses seeded shuffle (Mulberry32 PRNG) — cycles through all vibes before repeating
-3. New seed each session — different order every time you restart pi
-4. Zero latency, zero cost, works offline
-
-**Prompt template variables (generate mode only):**
-
-- `{theme}` — the current vibe theme (e.g., "star trek", "mafia")
-- `{task}` — context hint (user prompt initially, then agent's response text or tool info on refresh)
-- `{exclude}` — recent vibes to avoid (auto-populated, e.g., "Don't use: vibe1, vibe2...")
+- `{theme}` — the default generated theme placeholder; `/vibe generate <theme>` writes the chosen theme into the prompt (e.g., "star trek")
+- `{task}` — context hint (user prompt, then agent's response text or tool info on refresh)
+- `{exclude}` — recent vibes to avoid (auto-populated)
 
 **How it works:**
 
-1. When you send a message, shows "Channeling {theme}..." placeholder
-2. AI generates a themed message in the background (3s timeout)
-3. Message updates to the themed version (e.g., "Engaging warp drive...")
-4. During long tasks, refreshes on tool calls (rate-limited, default 30s)
-5. Cost and latency depend on your configured `workingVibeModel`
+1. When you send a message, a themed message appears
+2. **If `source` is `"packs"`:** picks from pre-built messages; shimmer is applied when `animation` is `"shimmer"`
+3. **If `source` is `"generated"`:** calls AI in the background with a fixed 3s timeout
+4. **If `source` is `"generated"`:** during long tasks, refreshes on tool calls (rate-limited by `generated.refreshInterval`, default 30s)
+5. **If `source` is `"generated"`:** cost and latency depend on the configured `generated.model`
 
 ## Thinking Level Display
 

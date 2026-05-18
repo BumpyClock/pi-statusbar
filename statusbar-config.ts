@@ -1,5 +1,6 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { getDefaultColors } from "./theme.ts";
+import { parseVibeConfig, type VibeConfig } from "./vibe-config.ts";
 import type {
 	BuiltinStatusLineSegmentId,
 	ColorScheme,
@@ -21,6 +22,8 @@ export interface StatusbarConfig {
 	customItems: CustomStatusItem[];
 	mouseScroll: boolean;
 	fixedEditor: boolean;
+	/** Vibe (whimsical working message) config. Parsed via {@link parseVibeConfig}. */
+	vibe: VibeConfig;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -369,6 +372,7 @@ export function parseStatusbarConfig(
 		customItems: [],
 		mouseScroll: true,
 		fixedEditor: true,
+		vibe: parseVibeConfig(undefined),
 	};
 
 	const directPreset = normalizeBuiltinPreset(value, presets);
@@ -394,6 +398,7 @@ export function parseStatusbarConfig(
 		customItems: normalizeCustomItems(value.customItems),
 		mouseScroll: value.mouseScroll !== false,
 		fixedEditor: value.fixedEditor !== false,
+		vibe: parseVibeConfig(value.vibe),
 	};
 }
 
