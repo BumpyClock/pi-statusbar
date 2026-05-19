@@ -1,75 +1,76 @@
 # Code Context
 
 ## Files Retrieved
-1. `bash-mode/completion.ts` (lines 418-505 and 499-505) — `AutocompleteProvider` implementation methods currently typed as synchronous/union-return and failing interface conformance diagnostics.
-2. `shortcuts.ts` (lines 40-47) — `matchesConfiguredShortcut` runtime path to `matchesKey` with raw `string` arg triggering `KeyId` mismatch.
-3. `node_modules/@earendil-works/pi-tui/dist/autocomplete.d.ts` (lines 17-21, 34-37) — source of `AutocompleteProvider.getSuggestions` contract (`Promise<AutocompleteSuggestions | null>`).
-4. `node_modules/@earendil-works/pi-tui/dist/keys.d.ts` (lines 31-33, 42, 165) — `KeyId` includes `pageUp`/`pageDown` (camelCase), not `pageup`/`pagedown`.
-5. `index.ts` (lines 1905-1911, 1915-1945, 3160-3167) — call sites for `matchesConfiguredShortcut` and where bash autocomplete providers are wrapped/installed.
-6. `tests/bash-mode.test.ts` (lines 736-772) — explicit sync return assumptions for `getSuggestions` (`instanceof Promise` checks).
+
+1. `statusbar-config.ts` (lines 19-27, 365-401) — `StatusbarConfig` type and `parseStatusbarConfig()` default/merge logic for `mouseScroll` and `fixedEditor`; this is the core defaulting gate.
+2. `index.ts` (lines 114-121, 1213-1217, 2153-2217) — runtime config initialization + `/statusbar mouse-scroll` + `/statusbar fixed-editor` command handlers that mutate/persist options.
+3. `fixed-editor/terminal-split.ts` (lines 422-423, 451-452) — terminal compositor uses `mouseScroll` boolean to enable/disable mouse-reporting/selection behavior.
+4. `tests/custom-items.test.ts` (lines 14-54, 125-143, 146-157) — assertions that default config resolves to both flags `true` and option persistence merging semantics.
+5. `tests/fixed-editor.test.ts` (lines 1697-1743) — regression test for `mouseScroll: false` disabling terminal mouse reporting.
+6. `README.md` (lines 47-66) — user-facing defaults and settings examples for `fixedEditor`/`mouseScroll`.
+7. `package.json` (lines 2-3, 32-38) — version + release bump scripts used by release flow.
+8. `scripts/bump-version.js` (lines 11-16, 33-40, 68-105, 112-156) — manual version bump entry point and package-lock sync behavior.
+9. `.github/workflows/release-please.yml` (lines 1-41) — automated release PR/release workflow (release-please-action).
+10. `.github/workflows/release-from-package.yml` (lines 1-77) — manual workflow that tags/release by current `package.json` version.
+11. `.github/workflows/npm-publish.yml` (lines 1-58) — publish workflow triggered by GitHub release (or manual workflow_dispatch).
+12. `package-lock.json` (lines 1-10) — must stay in sync with `package.json` version.
 
 ## Key Code
 
-**Diagnostics captured (TypeScript LSP-equivalent run with `npx tsc --pretty false --noEmit --types node --allowImportingTsExtensions bash-mode/completion.ts shortcuts.ts`):**
-- `bash-mode/completion.ts:419` `BashAutocompleteProvider.getSuggestions(): AutocompleteSuggestions | null`
-- `bash-mode/completion.ts:459` `OneOffBashAutocompleteProvider.getSuggestions(): AutocompleteSuggestions | null`
-- `bash-mode/completion.ts:499` `ModeAwareAutocompleteProvider.getSuggestions(...): AutocompleteSuggestions | null | Promise<...>`
-- `shortcuts.ts:46` `matchesConfiguredShortcut(...){... return matchesKey(data, shortcut); }`
-
-**Contract mismatch source** (`pi-tui`):
-```ts
-export interface AutocompleteProvider {
-  getSuggestions(
-    lines: string[], cursorLine: number, cursorCol: number,
-    options: { signal: AbortSignal; force?: boolean }
-  ): Promise<AutocompleteSuggestions | null>;
-}
-```
-
-**Current provider signatures**:
-- `BashAutocompleteProvider.getSuggestions()` — no args, sync return.
-- `OneOffBashAutocompleteProvider.getSuggestions()` — no args, sync return.
-- `ModeAwareAutocompleteProvider.getSuggestions(...)` — mixed return including raw sync path.
-
-**Shortcut matching**:
-```ts
-const normalizedShortcut = shortcut.toLowerCase();
-if (shortcutUsesSuper(normalizedShortcut)) { ... }
-return matchesKey(data, shortcut);
-```
-- Type error: `shortcut` is `string`, but `matchesKey` requires `KeyId`.
-
-**`KeyId` constraint relevant detail:**
-- Accepts `pageUp`/`pageDown`, while shortcut normalization layer currently uses lowercase `pageup`/`pagedown`.
+- **Defaults are already explicitly true in config parse:**
+  ```ts
+  const defaultConfig: StatusbarConfig = {
+    ...,
+    mouseScroll: true,
+    fixedEditor: true,
+    ...
+  };
+  return {
+    ...,
+    mouseScroll: value.mouseScroll !== false,
+    fixedEditor: value.fixedEditor !== false,
+  };
+  ```
+- **Startup + command mutation path:** `startupSettings = readSettings(); config = parseStatusbarConfig(...)` at startup, and on `/statusbar mouse-scroll|fixed-editor`, config is toggled and persisted via `writeStatusbarOptionSetting(...)`.
+- **Runtime usage of mouse flag:** `TerminalSplitCompositor` sets `this.mouseScroll = options.mouseScroll !== false` and gates mouse reporting in install:
+  ```ts
+  this.mouseScroll ? enableMouseReporting() : "";
+  ```
+- **Release entry points:**
+  - `package.json` scripts: `npm run bump:patch|minor|major|set`.
+  - `.github/workflows/release-from-package.yml`: reads `package.json` version, ensures tag missing, creates GitHub release.
+  - `.github/workflows/npm-publish.yml`: publishes on release event.
 
 ## Architecture
-- `matchesConfiguredShortcut` is the shared router for runtime shortcut dispatch in `index.ts` (chat jump, stash, copy/cut, bash-mode toggle), so any normalization/type-guard change here changes all shortcut matching behavior.
-- Bash providers are installed in `index.ts:3160-3168` via `ModeAwareAutocompleteProvider` wrapper around `defaultProvider` + bash-specific providers.
-- Interface contract must stay compatible with `AutocompleteProvider`; current classes are used where async suggestions are expected.
 
-## Minimal safe fixes
-1. **`bash-mode/completion.ts`**
-   - `BashAutocompleteProvider.getSuggestions`:
-     - Add full params: `(lines, cursorLine, cursorCol, options)`.
-     - Return `Promise<AutocompleteSuggestions | null>` (likely `return Promise.resolve(null)` unless real suggestion logic exists).
-   - `OneOffBashAutocompleteProvider.getSuggestions`:
-     - Same change as above.
-   - `ModeAwareAutocompleteProvider.getSuggestions`:
-     - Change return to `Promise<AutocompleteSuggestions | null>` and align body with awaited provider calls.
-     - Keep fallback for missing `defaultProvider` returning `null` (as resolved promise in async context).
-
-2. **`shortcuts.ts`**
-   - Normalize non-`super` shortcut before `matchesKey` into `KeyId`-compatible string:
-     - map `pageup -> pageUp`, `pagedown -> pageDown` at minimum.
-     - narrow to `KeyId` only after mapping (or explicit local helper/type-guard).
-   - Keep super regex path unchanged.
-
-## Test impact
-- `tests/bash-mode.test.ts`:
-  - `"bash autocomplete providers return null synchronously in shell contexts"` currently asserts no Promise (`lines 736-746`).
-  - `"mode-aware autocomplete provider preserves synchronous default results"` currently asserts returned object is not Promise (`lines 748-772`).
-  - Both need update if `getSuggestions` becomes Promise-based.
-- Existing shortcut tests in `tests/jump-shortcuts.test.ts` only exercise `super+...` flows, so non-super canonicalization change likely requires **new coverage** for `pageup/pagedown` behavior, not replacement of existing coverage.
+- User config is loaded through `readSettings()` in `index.ts`, merged from global/project JSON.
+- `parseStatusbarConfig()` normalizes defaults, then all runtime behavior reads `config.mouseScroll` / `config.fixedEditor`.
+- Commands update `config` in-memory and persist under `statusbar` setting.
+- `TerminalSplitCompositor` receives resolved options and directly controls whether mouse-wheel/input reporting is active in fixed-editor mode.
+- Release flow is split: version bump + tag/release (`release-from-package` or release-please automation) → publish (`npm-publish`).
 
 ## Start Here
-Open `bash-mode/completion.ts` around class methods `getSuggestions` (`~lines 419, 459, 499`) first to align signatures with `AutocompleteProvider`, then open `shortcuts.ts` around `matchesConfiguredShortcut` (`~line 40`) for `KeyId`-safe normalization.
+
+`statusbar-config.ts` (lines 365-401) because default behavior is set/overridden here; if not true, this is the first fix point before touching `index.ts` UI wiring.
+
+## Recommendations (exact)
+
+- **Defaults change needed?** Based on current code, **no code change required** for `fixedEditor` + `mouseScroll` defaults — already `true` in both entry points.
+- **If you still want an explicit behavioral hardening**, consider adding/confirming tests in `tests/custom-items.test.ts` around defaults only when future regressions are possible.
+- **Release prep commands (manual, deterministic):**
+  - `npm run bump:patch` (or minor/major)
+  - `npm run bump:patch --dry-run` first to preview
+  - `npm run typecheck`
+  - `npm test`
+  - `git add package.json package-lock.json`
+  - `git commit -m "fix: enforce fixedEditor/mouseScroll defaults as true"`
+  - `git push`
+  - `gh workflow run "Release From Package" -f version="$(node -p "require('./package.json').version")" -f target=main`
+- **Alternative auto-release path:** push normal commits/PRs, then let `release-please` run on `main`; it will handle PR+release creation if conventional commits are present.
+
+- **Tests to run for default safety:**
+  - `node --experimental-strip-types --test tests/custom-items.test.ts`
+  - `node --experimental-strip-types --test tests/fixed-editor.test.ts`
+  - `npm run typecheck && npm test`
+
+- **Open risk / constraint:** `package.json` is `0.1.1` while tags/changelog indicate `v0.5.x`; before release, confirm intended next version target so bump/release does not create unexpected semver regression with existing tag history.

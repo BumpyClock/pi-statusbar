@@ -1,3 +1,39 @@
+/**
+ * Terminal split compositor — manages a fixed-position cluster (editor/status)
+ * anchored to the bottom of an alternate-screen terminal, with a scrollable
+ * root viewport above it.
+ *
+ * ## Extracted modules
+ *
+ * 1. **ANSI escape helpers** → `./terminal-ansi.ts` — pure functions for
+ *    DEC private-mode, synchronized-output, scroll-region, cursor, and
+ *    keyboard mode sequences.
+ *
+ * 2. **SGR mouse parsing** → `./mouse.ts` — stateless packet parser and
+ *    button/scroll classifiers.
+ *
+ * ## Remaining responsibilities
+ *
+ * 3. **Selection model** — text selection state (anchor/focus/area), hit
+ *    testing, range computation, highlight rendering, selected-text
+ *    extraction, and double-click word selection.
+ *
+ * 4. **Viewport / window math** — scroll offset clamping, visible-root-window
+ *    slicing, row reservation for the fixed cluster, and jump-to-target
+ *    navigation.
+ *
+ * 5. **Terminal patching & cleanup** — monkey-patches `terminal.write`,
+ *    `terminal.rows`, `tui.render`, `tui.doRender`, and
+ *    `tui.compositeLineAt` during install; restores originals on dispose.
+ *    Manages alternate-screen lifecycle, extended keyboard modes
+ *    (Kitty / modifyOtherKeys), and emergency exit cleanup.
+ *
+ * ## Future extraction seams
+ *
+ * Group 3 (selection) is pure/stateless and can be extracted to a dedicated
+ * module. Group 4 depends only on line arrays and numeric state. Group 5 is
+ * inherently side-effectful and owns the compositor lifecycle.
+ */
 import {
 	isKeyRelease,
 	matchesKey,
@@ -6,6 +42,45 @@ import {
 } from "@earendil-works/pi-tui";
 import { matchesConfiguredShortcut } from "../shortcuts.ts";
 import type { FixedEditorClusterRender } from "./cluster.ts";
+import {
+	beginSynchronizedOutput,
+	clearLine,
+	disableAlternateScrollMode,
+	disableExtendedKeyboardMode,
+	disableMouseReporting,
+	enableAlternateScrollMode,
+	enableExtendedKeyboardMode,
+	enableMouseReporting,
+	endSynchronizedOutput,
+	enterAlternateScreen,
+	exitAlternateScreen,
+	hideCursor,
+	moveCursor,
+	resetExtendedKeyboardModes,
+	resetScrollRegion,
+	setScrollRegion,
+	showCursor,
+	type ExtendedKeyboardMode,
+} from "./terminal-ansi.ts";
+import {
+	isLeftDrag,
+	isLeftPress,
+	isMouseRelease,
+	isRightPress,
+	mouseScrollDelta,
+	parseSgrMousePackets,
+	type SgrMousePacket,
+} from "./mouse.ts";
+
+// Re-export public ANSI helpers so existing imports from this module keep working.
+export {
+	beginSynchronizedOutput,
+	endSynchronizedOutput,
+	setScrollRegion,
+	resetScrollRegion,
+	moveCursor,
+	emergencyTerminalModeReset,
+} from "./terminal-ansi.ts";
 
 export interface TerminalLike {
 	columns: number;
@@ -55,13 +130,6 @@ type CompositeLineAt = (
 	totalWidth: number,
 ) => string;
 
-interface SgrMousePacket {
-	code: number;
-	col: number;
-	row: number;
-	final: "M" | "m";
-}
-
 interface SelectionPoint {
 	line: number;
 	col: number;
@@ -78,8 +146,6 @@ interface DisposeOptions {
 	resetExtendedKeyboardModes?: boolean;
 }
 
-type ExtendedKeyboardMode = "kitty" | "modifyOtherKeys";
-
 const CONTEXT_MENU_MOUSE_REPORTING_PAUSE_MS = 1200;
 const CONTEXT_MENU_SELECTION_RESTORE_WINDOW_MS = 5000;
 const CONTEXT_MENU_CLIPBOARD_RESTORE_INTERVAL_MS = 100;
@@ -88,86 +154,6 @@ const DEFAULT_KEYBOARD_SCROLL_SHORTCUTS: KeyboardScrollShortcuts = {
 	up: "super+up",
 	down: "super+down",
 };
-
-export function beginSynchronizedOutput(): string {
-	return "\x1b[?2026h";
-}
-
-export function endSynchronizedOutput(): string {
-	return "\x1b[?2026l";
-}
-
-export function setScrollRegion(top: number, bottom: number): string {
-	return `\x1b[${top};${bottom}r`;
-}
-
-export function resetScrollRegion(): string {
-	return "\x1b[r";
-}
-
-export function moveCursor(row: number, col: number): string {
-	return `\x1b[${row};${col}H`;
-}
-
-function clearLine(): string {
-	return "\x1b[2K";
-}
-
-function hideCursor(): string {
-	return "\x1b[?25l";
-}
-
-function showCursor(): string {
-	return "\x1b[?25h";
-}
-
-function enterAlternateScreen(): string {
-	return "\x1b[?1049h";
-}
-
-function exitAlternateScreen(): string {
-	return "\x1b[?1049l";
-}
-
-function enableAlternateScrollMode(): string {
-	return "\x1b[?1007h";
-}
-
-function disableAlternateScrollMode(): string {
-	return "\x1b[?1007l";
-}
-
-function enableMouseReporting(): string {
-	return "\x1b[?1002h\x1b[?1006h";
-}
-
-function disableMouseReporting(): string {
-	return "\x1b[?1006l\x1b[?1002l\x1b[?1000l";
-}
-
-function enableExtendedKeyboardMode(mode: ExtendedKeyboardMode): string {
-	return mode === "kitty" ? "\x1b[>7u" : "\x1b[>4;2m";
-}
-
-function disableExtendedKeyboardMode(mode: ExtendedKeyboardMode): string {
-	return mode === "kitty" ? "\x1b[<u" : "\x1b[>4;0m";
-}
-
-function resetExtendedKeyboardModes(): string {
-	return "\x1b[<999u\x1b[>4;0m";
-}
-
-export function emergencyTerminalModeReset(): string {
-	return (
-		beginSynchronizedOutput() +
-		resetScrollRegion() +
-		disableMouseReporting() +
-		enableAlternateScrollMode() +
-		exitAlternateScreen() +
-		resetExtendedKeyboardModes() +
-		endSynchronizedOutput()
-	);
-}
 
 function parseKeyboardScrollDelta(
 	data: string,
@@ -194,65 +180,6 @@ function parseKeyboardScrollDelta(
 	)
 		return -10;
 	return 0;
-}
-
-function parseSgrMousePackets(data: string): SgrMousePacket[] | null {
-	const pattern = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/g;
-	const packets: SgrMousePacket[] = [];
-	let offset = 0;
-
-	for (const match of data.matchAll(pattern)) {
-		if (match.index !== offset) return null;
-		offset = match.index + match[0].length;
-		packets.push({
-			code: Number(match[1]),
-			col: Number(match[2]),
-			row: Number(match[3]),
-			final: match[4] as "M" | "m",
-		});
-	}
-
-	return packets.length > 0 && offset === data.length ? packets : null;
-}
-
-function mouseBaseButton(code: number): number {
-	return code & ~(4 | 8 | 16 | 32);
-}
-
-function mouseScrollDelta(packet: SgrMousePacket): number {
-	if (packet.final !== "M") return 0;
-	const baseButton = mouseBaseButton(packet.code);
-	if (baseButton === 64) return 3;
-	if (baseButton === 65) return -3;
-	return 0;
-}
-
-function isLeftPress(packet: SgrMousePacket): boolean {
-	return (
-		packet.final === "M" &&
-		mouseBaseButton(packet.code) === 0 &&
-		(packet.code & 32) === 0
-	);
-}
-
-function isLeftDrag(packet: SgrMousePacket): boolean {
-	return (
-		packet.final === "M" &&
-		mouseBaseButton(packet.code) === 0 &&
-		(packet.code & 32) !== 0
-	);
-}
-
-function isRightPress(packet: SgrMousePacket): boolean {
-	return (
-		packet.final === "M" &&
-		mouseBaseButton(packet.code) === 2 &&
-		(packet.code & 32) === 0
-	);
-}
-
-function isMouseRelease(packet: SgrMousePacket): boolean {
-	return packet.final === "m";
 }
 
 function stripOscSequences(line: string): string {
@@ -364,6 +291,13 @@ export function buildFixedClusterPaint(
 	return buffer;
 }
 
+/**
+ * Compositor that splits the terminal into a scrollable root viewport and a
+ * fixed cluster pinned to the bottom rows. Owns terminal patching lifecycle,
+ * input routing, scroll state, and selection state.
+ *
+ * @see module doc above for extraction seam map.
+ */
 export class TerminalSplitCompositor {
 	private readonly tui: any;
 	private readonly terminal: TerminalLike;

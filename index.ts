@@ -12,25 +12,14 @@ import {
 	type SelectItem,
 	SelectList,
 	truncateToWidth,
-	TUI_KEYBINDINGS,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
-import {
-	readFileSync,
-	writeFileSync,
-	existsSync,
-	mkdirSync,
-	readdirSync,
-} from "node:fs";
-import { join, dirname } from "node:path";
-import { homedir } from "node:os";
 
 import type {
 	ColorScheme,
 	PresetDef,
 	SegmentContext,
 	StatusLinePreset,
-	StatusLineSegmentId,
 } from "./types.ts";
 import type { StatusbarConfig } from "./statusbar-config.ts";
 import { BashTranscriptStore } from "./bash-mode/transcript.ts";
@@ -49,32 +38,27 @@ import {
 	readProjectHistory,
 	appendProjectHistory,
 } from "./bash-mode/history.ts";
-import type { BashModeSettings } from "./bash-mode/types.ts";
 import { PRESETS } from "./presets.ts";
 import {
 	collectHiddenExtensionStatusKeys,
 	getNotificationExtensionStatuses,
-	mergeSegmentsWithCustomItems,
-	nextStatusbarSettingWithOptions,
-	nextStatusbarSettingWithPreset,
 	parseStatusbarConfig,
 	resolvePresetDef,
 } from "./statusbar-config.ts";
-import { getSeparator } from "./separators.ts";
-import { renderSegment } from "./segments.ts";
 import {
 	getGitStatus,
 	invalidateGitStatus,
 	invalidateGitBranch,
 } from "./git-status.ts";
 import { ansi, getFgAnsiCode } from "./colors.ts";
+import { computeResponsiveLayout } from "./statusbar/layout.ts";
 import {
 	WelcomeComponent,
 	WelcomeHeader,
 	discoverLoadedCounts,
 	getRecentSessions,
-} from "./welcome.ts";
-import { createWelcomeDismissScheduler } from "./welcome-dismiss.ts";
+} from "./welcome/component.ts";
+import { createWelcomeDismissScheduler } from "./welcome/dismiss.ts";
 import { createRenderScheduler } from "./render-scheduler.ts";
 import { readCoreContextUsage } from "./context-usage.ts";
 import { renderFixedEditorCluster } from "./fixed-editor/cluster.ts";
@@ -83,12 +67,39 @@ import {
 	TerminalSplitCompositor,
 } from "./fixed-editor/terminal-split.ts";
 import { getDefaultColors } from "./theme.ts";
+import { matchesConfiguredShortcut } from "./shortcuts.ts";
 import {
-	isSupportedSuperShortcut,
-	matchesConfiguredShortcut,
-	shortcutConflictKey,
-	shortcutUsesSuper,
-} from "./shortcuts.ts";
+	readSettings,
+	writeStatusbarSetting,
+	detectCustomCompactionEnabled,
+} from "./core/statusbar-settings.ts";
+import {
+	isRecord,
+	hasNonWhitespaceText,
+	buildStashPreview,
+	pushStashHistory,
+} from "./core/stash-helpers.ts";
+import {
+	snapshotPromptHistory,
+	restorePromptHistory,
+	trackPromptHistory,
+	clearSavedPromptHistory,
+	type PromptHistoryEditor,
+} from "./core/prompt-history.ts";
+import {
+	readRecentProjectPrompts,
+	readPersistedStashHistory,
+	persistStashHistory,
+} from "./core/stash-history.ts";
+import {
+	type ChatJumpShortcutAction,
+	type ChatJumpRole,
+	type ChatJumpDirection,
+	type StatusbarShortcutAction,
+	CHAT_JUMP_SHORTCUTS,
+	resolveShortcutConfig,
+	parseBashModeSettings,
+} from "./core/shortcut-config.ts";
 import {
 	initVibeManager,
 	updateVibeConfig,
@@ -97,15 +108,16 @@ import {
 	onVibeAgentStart,
 	onVibeAgentEnd,
 	onVibeToolCall,
-} from "./working-vibes.ts";
+} from "./vibes/manager.ts";
 import {
 	parseVibeConfig,
 	nextStatusbarVibeSetting,
 	nextVibeSetting,
-	DEFAULT_GENERATED_VIBE_PROMPT,
 	type VibeConfig,
-} from "./vibe-config.ts";
-import { BUILTIN_VIBE_PACKS, getBuiltinVibePackIds } from "./vibe-packs.ts";
+} from "./vibes/config.ts";
+import { createVibeCommandHandler } from "./commands/vibe-command.ts";
+import { createBashModeCommandHandler } from "./commands/bash-mode-command.ts";
+import { createStatusbarCommandHandler } from "./commands/statusbar-command.ts";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Configuration
@@ -123,207 +135,16 @@ let config: StatusbarConfig = {
 const CUSTOM_COMPACTION_STATUS_KEY = "compact-policy";
 let customCompactionEnabled = false;
 
-interface StatusbarShortcuts {
-	stashHistory: string;
-	copyEditor: string;
-	cutEditor: string;
-	jumpPreviousUserMessage: string;
-	jumpNextUserMessage: string;
-	jumpPreviousLlmMessage: string;
-	jumpNextLlmMessage: string;
-	jumpChatBottom: string;
-	scrollChatUp: string;
-	scrollChatDown: string;
-	editorStart: string;
-	editorEnd: string;
-}
-
-type StatusbarShortcutKey = keyof StatusbarShortcuts;
-type ChatJumpShortcutKey = Extract<
-	StatusbarShortcutKey,
-	| "jumpPreviousUserMessage"
-	| "jumpNextUserMessage"
-	| "jumpPreviousLlmMessage"
-	| "jumpNextLlmMessage"
-	| "jumpChatBottom"
->;
-type ChatJumpRole = "user" | "assistant";
-type ChatJumpDirection = "previous" | "next";
-type ChatJumpShortcutAction =
-	| { kind: "message"; role: ChatJumpRole; direction: ChatJumpDirection }
-	| { kind: "bottom" };
-type StatusbarShortcutAction =
-	| { kind: "stashHistory" }
-	| { kind: "copyEditor" }
-	| { kind: "cutEditor" }
-	| { kind: "bashMode" }
-	| { kind: "chat"; action: ChatJumpShortcutAction };
-
 const STASH_HISTORY_LIMIT = 12;
 const PROJECT_PROMPT_HISTORY_LIMIT = 50;
 const STASH_PREVIEW_WIDTH = 72;
-const DEFAULT_SHORTCUTS: StatusbarShortcuts = {
-	stashHistory: "ctrl+alt+h",
-	copyEditor: "ctrl+alt+c",
-	cutEditor: "ctrl+alt+x",
-	jumpPreviousUserMessage: "ctrl+shift+u",
-	jumpNextUserMessage: "ctrl+shift+i",
-	jumpPreviousLlmMessage: "ctrl+alt+,",
-	jumpNextLlmMessage: "ctrl+alt+.",
-	jumpChatBottom: "ctrl+shift+g",
-	scrollChatUp: "super+up",
-	scrollChatDown: "super+down",
-	editorStart: "super+shift+up",
-	editorEnd: "super+shift+down",
-};
-const DEFAULT_BASH_MODE_SETTINGS: BashModeSettings = {
-	toggleShortcut: "ctrl+shift+b",
-	transcriptMaxLines: 2000,
-	transcriptMaxBytes: 512 * 1024,
-};
-const CHAT_JUMP_SHORTCUTS: Array<{
-	shortcutKey: ChatJumpShortcutKey;
-	description: string;
-	action: ChatJumpShortcutAction;
-}> = [
-	{
-		shortcutKey: "jumpPreviousUserMessage",
-		description: "Jump to previous user message",
-		action: { kind: "message", role: "user", direction: "previous" },
-	},
-	{
-		shortcutKey: "jumpNextUserMessage",
-		description: "Jump to next user message",
-		action: { kind: "message", role: "user", direction: "next" },
-	},
-	{
-		shortcutKey: "jumpPreviousLlmMessage",
-		description: "Jump to previous LLM message",
-		action: { kind: "message", role: "assistant", direction: "previous" },
-	},
-	{
-		shortcutKey: "jumpNextLlmMessage",
-		description: "Jump to next LLM message",
-		action: { kind: "message", role: "assistant", direction: "next" },
-	},
-	{
-		shortcutKey: "jumpChatBottom",
-		description: "Jump chat to bottom",
-		action: { kind: "bottom" },
-	},
-];
-const SHORTCUT_KEYS: StatusbarShortcutKey[] = [
-	"stashHistory",
-	"copyEditor",
-	"cutEditor",
-	"jumpPreviousUserMessage",
-	"jumpNextUserMessage",
-	"jumpPreviousLlmMessage",
-	"jumpNextLlmMessage",
-	"jumpChatBottom",
-	"scrollChatUp",
-	"scrollChatDown",
-	"editorStart",
-	"editorEnd",
-];
-const APP_RESERVED_SHORTCUTS = [
-	"escape",
-	"ctrl+c",
-	"ctrl+d",
-	"ctrl+z",
-	"shift+tab",
-	"ctrl+p",
-	"shift+ctrl+p",
-	"ctrl+l",
-	"ctrl+o",
-	"shift+ctrl+o",
-	"ctrl+t",
-	"ctrl+n",
-	"ctrl+g",
-	"alt+enter",
-	"alt+up",
-	"alt+down",
-	"ctrl+v",
-	"alt+v",
-	"shift+l",
-	"shift+t",
-	"ctrl+s",
-	"ctrl+r",
-	"ctrl+backspace",
-	"ctrl+a",
-	"ctrl+x",
-	"ctrl+u",
-] as const;
-const EXTRA_RESERVED_SHORTCUTS = ["alt+s"] as const;
-const SHORTCUT_MODIFIER_ORDER = ["ctrl", "alt", "super", "shift"] as const;
-const SHORTCUT_MODIFIERS = new Set<string>(SHORTCUT_MODIFIER_ORDER);
-const SHORTCUT_NAMED_KEYS = new Set([
-	"escape",
-	"esc",
-	"enter",
-	"return",
-	"tab",
-	"space",
-	"backspace",
-	"delete",
-	"insert",
-	"clear",
-	"home",
-	"end",
-	"pageup",
-	"pagedown",
-	"up",
-	"down",
-	"left",
-	"right",
-]);
-const SHORTCUT_SYMBOL_KEYS = new Set([
-	"`",
-	"-",
-	"=",
-	"[",
-	"]",
-	"\\",
-	";",
-	"'",
-	",",
-	".",
-	"/",
-	"!",
-	"@",
-	"#",
-	"$",
-	"%",
-	"^",
-	"&",
-	"*",
-	"(",
-	")",
-	"_",
-	"|",
-	"~",
-	"{",
-	"}",
-	":",
-	"<",
-	">",
-	"?",
-]);
-const PROMPT_HISTORY_LIMIT = 100;
 const LAYOUT_CACHE_TTL_MS = 250;
 const STREAMING_LAYOUT_CACHE_TTL_MS = 1000;
 const STATUS_RENDER_DEBOUNCE_MS = 33;
 const CONTEXT_STATUS_RENDER_MS = 250;
 const EDITOR_STATUS_DEFER_MS = 150;
-const PROMPT_HISTORY_TRACKED = Symbol.for(
-	"@bumpyclock/pi-statusbar/promptHistoryTracked",
-);
-const PROMPT_HISTORY_STATE_KEY = Symbol.for(
-	"@bumpyclock/pi-statusbar/promptHistoryState",
-);
 
 type ShortcutKeyId = Parameters<ExtensionAPI["registerShortcut"]>[0];
-type PromptHistoryState = { savedPromptHistory: string[] };
 type SessionAssistantUsage = AssistantMessage["usage"];
 
 function getUsageTokenTotal(usage: SessionAssistantUsage): number {
@@ -365,457 +186,6 @@ function isSessionAssistantMessage(value: unknown): value is AssistantMessage {
 	);
 }
 
-function isPromptHistoryState(value: unknown): value is PromptHistoryState {
-	return (
-		isRecord(value) &&
-		Array.isArray(value.savedPromptHistory) &&
-		value.savedPromptHistory.every((entry) => typeof entry === "string")
-	);
-}
-
-function getPromptHistoryState(): PromptHistoryState {
-	const existing = Reflect.get(globalThis, PROMPT_HISTORY_STATE_KEY);
-	if (isPromptHistoryState(existing)) {
-		return existing;
-	}
-
-	const state: PromptHistoryState = { savedPromptHistory: [] };
-	Reflect.set(globalThis, PROMPT_HISTORY_STATE_KEY, state);
-	return state;
-}
-
-function readPromptHistory(editor: any): string[] {
-	const history = editor?.history;
-	if (!Array.isArray(history)) return [];
-
-	const normalized: string[] = [];
-	for (const entry of history) {
-		if (typeof entry !== "string") continue;
-		const trimmed = entry.trim();
-		if (!trimmed) continue;
-		if (normalized.length > 0 && normalized[normalized.length - 1] === trimmed)
-			continue;
-		normalized.push(trimmed);
-		if (normalized.length >= PROMPT_HISTORY_LIMIT) break;
-	}
-
-	return normalized;
-}
-
-function snapshotPromptHistory(editor: any): void {
-	const history = readPromptHistory(editor);
-	if (history.length > 0) {
-		getPromptHistoryState().savedPromptHistory = [...history];
-	}
-}
-
-function restorePromptHistory(editor: any): void {
-	const { savedPromptHistory } = getPromptHistoryState();
-	if (!savedPromptHistory.length || typeof editor?.addToHistory !== "function")
-		return;
-
-	for (let i = savedPromptHistory.length - 1; i >= 0; i--) {
-		editor.addToHistory(savedPromptHistory[i]);
-	}
-}
-
-function trackPromptHistory(editor: any): void {
-	if (!editor || typeof editor.addToHistory !== "function") return;
-	if (editor[PROMPT_HISTORY_TRACKED]) {
-		snapshotPromptHistory(editor);
-		return;
-	}
-
-	const originalAddToHistory = editor.addToHistory.bind(editor);
-	editor.addToHistory = (text: string) => {
-		originalAddToHistory(text);
-		snapshotPromptHistory(editor);
-	};
-	editor[PROMPT_HISTORY_TRACKED] = true;
-	snapshotPromptHistory(editor);
-}
-
-function getSettingsPath(): string {
-	const homeDir = process.env.HOME || process.env.USERPROFILE || homedir();
-	return join(homeDir, ".pi", "agent", "settings.json");
-}
-
-function getProjectSettingsPath(cwd: string): string {
-	return join(cwd, ".pi", "settings.json");
-}
-
-function getGlobalCompactionPolicyPath(): string {
-	const homeDir = process.env.HOME || process.env.USERPROFILE || homedir();
-	return join(homeDir, ".pi", "agent", "compaction-policy.json");
-}
-
-function getCustomCompactionExtensionPath(): string {
-	const homeDir = process.env.HOME || process.env.USERPROFILE || homedir();
-	return join(homeDir, ".pi", "agent", "extensions", "pi-custom-compaction");
-}
-
-function mergeSettings(
-	base: Record<string, unknown>,
-	override: Record<string, unknown>,
-): Record<string, unknown> {
-	const merged: Record<string, unknown> = { ...base };
-
-	for (const [key, overrideValue] of Object.entries(override)) {
-		const baseValue = merged[key];
-		merged[key] =
-			isRecord(baseValue) && isRecord(overrideValue)
-				? mergeSettings(baseValue, overrideValue)
-				: overrideValue;
-	}
-
-	return merged;
-}
-
-function readSettingsFile(settingsPath: string): Record<string, unknown> {
-	try {
-		if (!existsSync(settingsPath)) {
-			return {};
-		}
-
-		const parsed = JSON.parse(readFileSync(settingsPath, "utf-8"));
-		if (!isRecord(parsed)) {
-			console.debug(
-				`[pi-statusbar] Ignoring non-object settings at ${settingsPath}`,
-			);
-			return {};
-		}
-
-		return parsed;
-	} catch (error) {
-		// Settings are user-edited input. Log and keep the extension running with defaults
-		// instead of crashing the UI during startup.
-		console.debug(
-			`[pi-statusbar] Failed to read settings from ${settingsPath}:`,
-			error,
-		);
-		return {};
-	}
-}
-
-function readWritableSettingsFile(
-	settingsPath: string,
-): Record<string, unknown> | null {
-	if (!existsSync(settingsPath)) {
-		return {};
-	}
-
-	try {
-		const parsed = JSON.parse(readFileSync(settingsPath, "utf-8"));
-		if (!isRecord(parsed)) {
-			console.debug(
-				`[pi-statusbar] Refusing to write settings to non-object file at ${settingsPath}`,
-			);
-			return null;
-		}
-
-		return parsed;
-	} catch (error) {
-		// Do not overwrite malformed user settings with partial data. Surface the failure
-		// through the command handler so the user can fix the file intentionally.
-		console.debug(
-			`[pi-statusbar] Failed to parse settings at ${settingsPath}:`,
-			error,
-		);
-		return null;
-	}
-}
-
-function readCompactionPolicyEnabled(configPath: string): boolean | undefined {
-	if (!existsSync(configPath)) return undefined;
-	try {
-		const parsed = JSON.parse(readFileSync(configPath, "utf-8"));
-		if (!isRecord(parsed) || typeof parsed.enabled !== "boolean") return false;
-		return parsed.enabled;
-	} catch (error) {
-		console.debug(
-			`[pi-statusbar] Failed to read compaction policy from ${configPath}:`,
-			error,
-		);
-		return false;
-	}
-}
-
-function detectCustomCompactionEnabled(cwd: string): boolean {
-	if (!existsSync(getCustomCompactionExtensionPath())) return false;
-
-	const projectSetting = readCompactionPolicyEnabled(
-		join(cwd, ".pi", "compaction-policy.json"),
-	);
-	if (projectSetting !== undefined) return projectSetting;
-
-	return readCompactionPolicyEnabled(getGlobalCompactionPolicyPath()) ?? false;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function getStashHistoryPath(): string {
-	const homeDir = process.env.HOME || process.env.USERPROFILE || homedir();
-	return join(homeDir, ".pi", "agent", "pi-statusbar", "stash-history.json");
-}
-
-function getSessionsPath(): string {
-	const homeDir = process.env.HOME || process.env.USERPROFILE || homedir();
-	return join(homeDir, ".pi", "agent", "sessions");
-}
-
-function getProjectSessionsPath(cwd: string): string {
-	const projectKey = cwd
-		.replace(/^[/\\]+|[/\\]+$/g, "")
-		.replace(/[\\/]+/g, "-");
-
-	return join(getSessionsPath(), `--${projectKey}--`);
-}
-
-function getPromptHistoryText(content: unknown): string {
-	if (typeof content === "string") {
-		return content.replace(/\s+/g, " ").trim();
-	}
-
-	if (!Array.isArray(content)) {
-		return "";
-	}
-
-	const parts: string[] = [];
-	for (const block of content) {
-		if (
-			!isRecord(block) ||
-			block.type !== "text" ||
-			typeof block.text !== "string"
-		) {
-			continue;
-		}
-		parts.push(block.text);
-	}
-
-	return parts.join("\n").replace(/\s+/g, " ").trim();
-}
-
-function readRecentProjectPrompts(cwd: string, limit: number): string[] {
-	const sessionsPath = getProjectSessionsPath(cwd);
-	if (!existsSync(sessionsPath)) {
-		return [];
-	}
-
-	const promptEntries: { text: string; timestamp: number }[] = [];
-	const fileNames = readdirSync(sessionsPath).filter((fileName) =>
-		fileName.endsWith(".jsonl"),
-	);
-
-	for (const fileName of fileNames) {
-		const filePath = join(sessionsPath, fileName);
-		const lines = readFileSync(filePath, "utf-8").split("\n");
-
-		for (let i = lines.length - 1; i >= 0; i--) {
-			const line = lines[i];
-			if (
-				!line ||
-				!line.includes('"type":"message"') ||
-				!line.includes('"role":"user"')
-			) {
-				continue;
-			}
-
-			let entry: unknown;
-			try {
-				entry = JSON.parse(line);
-			} catch (error) {
-				console.debug(
-					`[pi-statusbar] Skipping malformed line in ${filePath}:`,
-					error,
-				);
-				continue;
-			}
-
-			if (
-				!isRecord(entry) ||
-				entry.type !== "message" ||
-				!isRecord(entry.message) ||
-				entry.message.role !== "user"
-			) {
-				continue;
-			}
-
-			const text = getPromptHistoryText(entry.message.content);
-			if (!hasNonWhitespaceText(text)) {
-				continue;
-			}
-
-			const timestamp =
-				typeof entry.message.timestamp === "number"
-					? entry.message.timestamp
-					: typeof entry.timestamp === "string"
-						? Date.parse(entry.timestamp)
-						: 0;
-
-			promptEntries.push({
-				text,
-				timestamp: Number.isFinite(timestamp) ? timestamp : 0,
-			});
-		}
-	}
-
-	promptEntries.sort((a, b) => b.timestamp - a.timestamp);
-
-	const prompts: string[] = [];
-	const seen = new Set<string>();
-	for (const entry of promptEntries) {
-		if (seen.has(entry.text)) {
-			continue;
-		}
-
-		seen.add(entry.text);
-		prompts.push(entry.text);
-		if (prompts.length >= limit) {
-			return prompts;
-		}
-	}
-
-	return prompts;
-}
-
-function normalizeStashHistoryEntries(value: unknown): string[] {
-	if (!Array.isArray(value)) {
-		return [];
-	}
-
-	const history: string[] = [];
-	for (const entry of value) {
-		if (typeof entry !== "string") {
-			continue;
-		}
-
-		if (!hasNonWhitespaceText(entry)) {
-			continue;
-		}
-
-		if (history[history.length - 1] === entry) {
-			continue;
-		}
-
-		history.push(entry);
-		if (history.length >= STASH_HISTORY_LIMIT) {
-			break;
-		}
-	}
-
-	return history;
-}
-
-function readPersistedStashHistory(): string[] {
-	const stashHistoryPath = getStashHistoryPath();
-
-	try {
-		if (!existsSync(stashHistoryPath)) {
-			return [];
-		}
-
-		const parsed = JSON.parse(readFileSync(stashHistoryPath, "utf-8"));
-		if (!isRecord(parsed)) {
-			console.debug(
-				`[pi-statusbar] Ignoring invalid stash history at ${stashHistoryPath}`,
-			);
-			return [];
-		}
-
-		return normalizeStashHistoryEntries(parsed.history);
-	} catch (error) {
-		console.debug(
-			`[pi-statusbar] Failed to read stash history from ${stashHistoryPath}:`,
-			error,
-		);
-		return [];
-	}
-}
-
-function persistStashHistory(history: string[]): void {
-	const stashHistoryPath = getStashHistoryPath();
-	const payload = {
-		version: 1,
-		history: history.slice(0, STASH_HISTORY_LIMIT),
-	};
-
-	try {
-		mkdirSync(dirname(stashHistoryPath), { recursive: true });
-		writeFileSync(stashHistoryPath, JSON.stringify(payload, null, 2) + "\n");
-	} catch (error) {
-		console.debug(
-			`[pi-statusbar] Failed to persist stash history to ${stashHistoryPath}:`,
-			error,
-		);
-	}
-}
-
-function readSettings(cwd: string = process.cwd()): Record<string, unknown> {
-	return mergeSettings(
-		readSettingsFile(getSettingsPath()),
-		readSettingsFile(getProjectSettingsPath(cwd)),
-	);
-}
-
-function writeStatusbarSetting(
-	cwd: string,
-	update: (existingStatusbarSetting: unknown) => unknown,
-): boolean {
-	const globalSettingsPath = getSettingsPath();
-	const projectSettingsPath = getProjectSettingsPath(cwd);
-	const globalSettings = readWritableSettingsFile(globalSettingsPath);
-	const projectSettings = readWritableSettingsFile(projectSettingsPath);
-
-	if (globalSettings === null || projectSettings === null) {
-		return false;
-	}
-
-	const writeToProject = Object.hasOwn(projectSettings, "statusbar");
-	const settingsPath = writeToProject
-		? projectSettingsPath
-		: globalSettingsPath;
-	const settings = writeToProject ? projectSettings : globalSettings;
-
-	settings.statusbar = update(settings.statusbar);
-
-	try {
-		mkdirSync(dirname(settingsPath), { recursive: true });
-		writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
-		return true;
-	} catch (error) {
-		console.debug(
-			`[pi-statusbar] Failed to persist statusbar setting to ${settingsPath}:`,
-			error,
-		);
-		return false;
-	}
-}
-
-function writeStatusbarPresetSetting(
-	preset: string,
-	cwd: string = process.cwd(),
-): boolean {
-	return writeStatusbarSetting(cwd, (existingStatusbarSetting) =>
-		nextStatusbarSettingWithPreset(existingStatusbarSetting, preset),
-	);
-}
-
-function writeStatusbarOptionSetting(
-	cwd: string,
-	updates: Partial<Pick<StatusbarConfig, "mouseScroll" | "fixedEditor">>,
-	currentPreset: string,
-): boolean {
-	return writeStatusbarSetting(cwd, (existingStatusbarSetting) =>
-		nextStatusbarSettingWithOptions(
-			existingStatusbarSetting,
-			updates,
-			currentPreset,
-		),
-	);
-}
-
 /**
  * Write a vibe config update to `statusbar.vibe` and update in-memory state.
  *
@@ -840,371 +210,15 @@ function writeVibeSettingAndUpdate(
 	return persisted;
 }
 
-/** Notify user of vibe command result with persistence status. */
-function notifyVibe(
-	ctx: { ui: { notify: (msg: string, level: string) => void } },
-	persisted: boolean,
-	message: string,
-): void {
-	if (persisted) {
-		ctx.ui.notify(message, "info");
-	} else {
-		ctx.ui.notify(`${message} (not persisted; check settings.json)`, "warning");
-	}
-}
-
 const PRESET_NAMES = Object.keys(PRESETS) as StatusLinePreset[];
-
-function isValidPreset(value: unknown): boolean {
-	if (typeof value !== "string") return false;
-	return Object.hasOwn(PRESETS, value) || Object.hasOwn(config.presets, value);
-}
-
-function normalizePreset(value: unknown): string | null {
-	if (typeof value !== "string") {
-		return null;
-	}
-
-	const preset = value.trim();
-	if (isValidPreset(preset)) return preset;
-
-	const builtInPreset = preset.toLowerCase();
-	return Object.hasOwn(PRESETS, builtInPreset) ? builtInPreset : null;
-}
-
-function hasNonWhitespaceText(text: string): boolean {
-	return text.trim().length > 0;
-}
 
 function getCurrentEditorText(ctx: any, editor: any): string {
 	return editor?.getExpandedText?.() ?? ctx.ui.getEditorText();
 }
 
-function buildStashPreview(text: string, maxWidth: number): string {
-	const compact = text.replace(/\s+/g, " ").trim();
-	if (!compact) return "(empty)";
-	return truncateToWidth(compact, maxWidth, "…");
-}
-
-function pushStashHistory(history: string[], text: string): boolean {
-	if (!hasNonWhitespaceText(text)) return false;
-	if (history[0] === text) return false;
-
-	history.unshift(text);
-	if (history.length > STASH_HISTORY_LIMIT) {
-		history.length = STASH_HISTORY_LIMIT;
-	}
-
-	return true;
-}
-
-function normalizeShortcut(value: string): string {
-	const parts = value.trim().toLowerCase().split("+");
-	if (parts.length <= 1) return parts[0] ?? "";
-
-	const modifierRank = new Map<string, number>(
-		SHORTCUT_MODIFIER_ORDER.map((modifier, index) => [modifier, index]),
-	);
-	const modifiers = parts
-		.slice(0, -1)
-		.sort((a, b) => (modifierRank.get(a) ?? 99) - (modifierRank.get(b) ?? 99));
-	return [...modifiers, parts[parts.length - 1]].join("+");
-}
-
-function reservedShortcuts(): Set<string> {
-	const shortcuts = new Set<string>(
-		[...EXTRA_RESERVED_SHORTCUTS, ...APP_RESERVED_SHORTCUTS].map(
-			normalizeShortcut,
-		),
-	);
-
-	for (const definition of Object.values(TUI_KEYBINDINGS)) {
-		const defaultKeys = definition.defaultKeys;
-		const keys =
-			defaultKeys === undefined
-				? []
-				: Array.isArray(defaultKeys)
-					? defaultKeys
-					: [defaultKeys];
-		for (const key of keys) {
-			shortcuts.add(normalizeShortcut(key));
-		}
-	}
-
-	return shortcuts;
-}
-
-function isValidShortcutKeyPart(keyPart: string): boolean {
-	const lowerKeyPart = keyPart.toLowerCase();
-
-	if (/^[a-z0-9]$/i.test(keyPart)) return true;
-	if (/^f([1-9]|1[0-2])$/i.test(keyPart)) return true;
-	if (SHORTCUT_NAMED_KEYS.has(lowerKeyPart)) return true;
-
-	return SHORTCUT_SYMBOL_KEYS.has(keyPart);
-}
-
-function parseShortcutOverride(value: unknown): string | null {
-	if (typeof value !== "string") {
-		return null;
-	}
-
-	const trimmed = value.trim();
-	if (!trimmed || /\s/.test(trimmed)) {
-		return null;
-	}
-
-	const parts = trimmed.split("+");
-	if (parts.some((part) => part.length === 0)) {
-		return null;
-	}
-
-	const modifierParts = parts.slice(0, -1).map((part) => {
-		const modifier = part.toLowerCase();
-		return modifier === "cmd" || modifier === "command" ? "super" : modifier;
-	});
-	if (new Set(modifierParts).size !== modifierParts.length) {
-		return null;
-	}
-
-	for (const modifier of modifierParts) {
-		if (!SHORTCUT_MODIFIERS.has(modifier)) {
-			return null;
-		}
-	}
-
-	const keyPart = parts[parts.length - 1];
-	if (!isValidShortcutKeyPart(keyPart)) {
-		return null;
-	}
-
-	const normalizedKey = SHORTCUT_SYMBOL_KEYS.has(keyPart)
-		? keyPart
-		: keyPart.toLowerCase();
-	const normalizedShortcut = normalizeShortcut(
-		[...modifierParts, normalizedKey].join("+"),
-	);
-	if (
-		shortcutUsesSuper(normalizedShortcut) &&
-		!isSupportedSuperShortcut(normalizedShortcut)
-	) {
-		return null;
-	}
-
-	return normalizedShortcut;
-}
-
-function shortcutUsageKey(shortcut: string): string {
-	return shortcutConflictKey(normalizeShortcut(shortcut));
-}
-
-function findShortcutReplacement(
-	key: StatusbarShortcutKey,
-	used: Set<string>,
-): string | null {
-	const preferred = DEFAULT_SHORTCUTS[key];
-	if (!used.has(shortcutUsageKey(preferred))) {
-		return preferred;
-	}
-
-	for (const shortcutKey of SHORTCUT_KEYS) {
-		const candidate = DEFAULT_SHORTCUTS[shortcutKey];
-		if (!used.has(shortcutUsageKey(candidate))) {
-			return candidate;
-		}
-	}
-
-	return null;
-}
-
-function resolveShortcutConfig(
-	settings: Record<string, unknown>,
-): StatusbarShortcuts {
-	const resolved: StatusbarShortcuts = { ...DEFAULT_SHORTCUTS };
-	const shortcutSettings = settings.statusbarShortcuts;
-
-	if (isRecord(shortcutSettings)) {
-		for (const key of SHORTCUT_KEYS) {
-			const override = parseShortcutOverride(shortcutSettings[key]);
-			if (override) {
-				resolved[key] = override;
-			}
-		}
-	}
-
-	const used = new Set(Array.from(reservedShortcuts(), shortcutUsageKey));
-
-	for (const key of SHORTCUT_KEYS) {
-		const configured = resolved[key];
-		const configuredUsageKey = shortcutUsageKey(configured);
-
-		if (!used.has(configuredUsageKey)) {
-			used.add(configuredUsageKey);
-			continue;
-		}
-
-		const replacement = findShortcutReplacement(key, used);
-		if (!replacement) {
-			console.debug(
-				`[pi-statusbar] Shortcut conflict for ${key}: "${configured}" is already in use`,
-			);
-			continue;
-		}
-
-		console.debug(
-			`[pi-statusbar] Shortcut conflict for ${key}: "${configured}" replaced with "${replacement}"`,
-		);
-
-		resolved[key] = replacement;
-		used.add(shortcutUsageKey(replacement));
-	}
-
-	return resolved;
-}
-
-function parseBashModeSettings(
-	settings: Record<string, unknown>,
-): BashModeSettings {
-	const raw = isRecord(settings.bashMode) ? settings.bashMode : {};
-
-	const configuredToggleShortcut = parseShortcutOverride(raw.toggleShortcut);
-	const toggleShortcut =
-		configuredToggleShortcut &&
-		!reservedShortcuts().has(shortcutUsageKey(configuredToggleShortcut))
-			? configuredToggleShortcut
-			: DEFAULT_BASH_MODE_SETTINGS.toggleShortcut;
-
-	if (configuredToggleShortcut && toggleShortcut !== configuredToggleShortcut) {
-		console.debug(
-			`[pi-statusbar] Bash mode shortcut conflict: "${configuredToggleShortcut}" replaced with "${toggleShortcut}"`,
-		);
-	}
-	const transcriptMaxLines =
-		typeof raw.transcriptMaxLines === "number" &&
-		Number.isFinite(raw.transcriptMaxLines)
-			? Math.max(100, Math.floor(raw.transcriptMaxLines))
-			: DEFAULT_BASH_MODE_SETTINGS.transcriptMaxLines;
-	const transcriptMaxBytes =
-		typeof raw.transcriptMaxBytes === "number" &&
-		Number.isFinite(raw.transcriptMaxBytes)
-			? Math.max(16 * 1024, Math.floor(raw.transcriptMaxBytes))
-			: DEFAULT_BASH_MODE_SETTINGS.transcriptMaxBytes;
-
-	return {
-		toggleShortcut,
-		transcriptMaxLines,
-		transcriptMaxBytes,
-	};
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
-// Status Line Builder
+// Status Line Builder  →  statusbar/layout.ts
 // ═══════════════════════════════════════════════════════════════════════════
-
-/** Render a single segment and return its content with width */
-function renderSegmentWithWidth(
-	segId: StatusLineSegmentId,
-	ctx: SegmentContext,
-): { content: string; width: number; visible: boolean } {
-	const rendered = renderSegment(segId, ctx);
-	if (!rendered.visible || !rendered.content) {
-		return { content: "", width: 0, visible: false };
-	}
-	return {
-		content: rendered.content,
-		width: visibleWidth(rendered.content),
-		visible: true,
-	};
-}
-
-/** Build content string from pre-rendered parts */
-function buildContentFromParts(parts: string[], presetDef: PresetDef): string {
-	if (parts.length === 0) return "";
-	const separatorDef = getSeparator(presetDef.separator);
-	const sepAnsi = getFgAnsiCode("sep");
-	const sep = separatorDef.left;
-	return " " + parts.join(` ${sepAnsi}${sep}${ansi.reset} `) + ansi.reset + " ";
-}
-
-/**
- * Responsive segment layout - fits segments into top bar, overflows to secondary row.
- * When terminal is wide enough, secondary segments move up to top bar.
- * When narrow, top bar segments overflow down to secondary row.
- */
-function computeResponsiveLayout(
-	ctx: SegmentContext,
-	presetDef: PresetDef,
-	availableWidth: number,
-): { topContent: string; secondaryContent: string } {
-	const separatorDef = getSeparator(presetDef.separator);
-	const sepWidth = visibleWidth(separatorDef.left) + 2; // separator + spaces around it
-
-	// Get all segments: primary first, then secondary
-	const mergedSegments = mergeSegmentsWithCustomItems(
-		presetDef,
-		config.customItems,
-	);
-	const primaryIds = [
-		...mergedSegments.leftSegments,
-		...mergedSegments.rightSegments,
-	];
-	const secondaryIds = mergedSegments.secondarySegments;
-	const allSegmentIds = [...primaryIds, ...secondaryIds];
-
-	// Render all segments and get their widths
-	const renderedSegments: { content: string; width: number }[] = [];
-	for (const segId of allSegmentIds) {
-		const { content, width, visible } = renderSegmentWithWidth(segId, ctx);
-		if (visible) {
-			renderedSegments.push({ content, width });
-		}
-	}
-
-	if (renderedSegments.length === 0) {
-		return { topContent: "", secondaryContent: "" };
-	}
-
-	// Calculate how many segments fit in top bar
-	// Account for: leading space (1) + trailing space (1) = 2 chars overhead
-	const baseOverhead = 2;
-	let currentWidth = baseOverhead;
-	const topSegments: string[] = [];
-	const overflowSegments: { content: string; width: number }[] = [];
-	let overflow = false;
-
-	for (const seg of renderedSegments) {
-		const neededWidth = seg.width + (topSegments.length > 0 ? sepWidth : 0);
-
-		if (!overflow && currentWidth + neededWidth <= availableWidth) {
-			topSegments.push(seg.content);
-			currentWidth += neededWidth;
-		} else {
-			overflow = true;
-			overflowSegments.push(seg);
-		}
-	}
-
-	// Fit overflow segments into secondary row (same width constraint)
-	// Stop at first non-fitting segment to preserve ordering
-	let secondaryWidth = baseOverhead;
-	const secondarySegments: string[] = [];
-
-	for (const seg of overflowSegments) {
-		const neededWidth =
-			seg.width + (secondarySegments.length > 0 ? sepWidth : 0);
-		if (secondaryWidth + neededWidth <= availableWidth) {
-			secondarySegments.push(seg.content);
-			secondaryWidth += neededWidth;
-		} else {
-			break;
-		}
-	}
-
-	return {
-		topContent: buildContentFromParts(topSegments, presetDef),
-		secondaryContent: buildContentFromParts(secondarySegments, presetDef),
-	};
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Extension
@@ -1239,7 +253,8 @@ export default function statusbar(pi: ExtensionAPI) {
 	let lastUserPrompt = "";
 	let showLastPrompt = true;
 	let stashedEditorText: string | null = null;
-	let stashedPromptHistory: string[] = readPersistedStashHistory();
+	let stashedPromptHistory: string[] =
+		readPersistedStashHistory(STASH_HISTORY_LIMIT);
 	let currentEditor: any = null;
 	let bashModeActive = false;
 	let bashTranscript = new BashTranscriptStore(bashModeSettings);
@@ -1532,7 +547,7 @@ export default function statusbar(pi: ExtensionAPI) {
 		resolvedShortcuts = resolveShortcutConfig(settings);
 		showLastPrompt = settings.showLastPrompt !== false;
 		config = parseStatusbarConfig(settings.statusbar, PRESET_NAMES);
-		stashedPromptHistory = readPersistedStashHistory();
+		stashedPromptHistory = readPersistedStashHistory(STASH_HISTORY_LIMIT);
 		bashModeActive = false;
 		bashTranscript = new BashTranscriptStore(bashModeSettings);
 		bashCompletionEngine = new BashCompletionEngine();
@@ -1775,12 +790,16 @@ export default function statusbar(pi: ExtensionAPI) {
 	}
 
 	function addStashHistoryEntry(text: string): void {
-		const changed = pushStashHistory(stashedPromptHistory, text);
+		const changed = pushStashHistory(
+			stashedPromptHistory,
+			text,
+			STASH_HISTORY_LIMIT,
+		);
 		if (!changed) {
 			return;
 		}
 
-		persistStashHistory(stashedPromptHistory);
+		persistStashHistory(stashedPromptHistory, STASH_HISTORY_LIMIT);
 	}
 
 	function copyTextToClipboard(
@@ -2102,12 +1121,13 @@ export default function statusbar(pi: ExtensionAPI) {
 	// Command to toggle/configure
 	pi.registerCommand("statusbar", {
 		description: "Configure statusbar (toggle, preset)",
-		handler: async (args, ctx) => {
-			// Update context reference (command ctx may have more methods)
-			currentCtx = ctx;
-
-			if (!args?.trim()) {
-				// Toggle
+		handler: createStatusbarCommandHandler({
+			isEnabled: () => enabled,
+			getConfig: () => config,
+			setCurrentCtx: (ctx) => {
+				currentCtx = ctx;
+			},
+			toggleStatusbar: (ctx) => {
 				enabled = !enabled;
 				if (enabled) {
 					setupCustomEditor(ctx);
@@ -2122,7 +1142,7 @@ export default function statusbar(pi: ExtensionAPI) {
 					welcomeHeaderActive = false;
 					welcomeOverlayShouldDismiss = false;
 					welcomeDismissScheduler.cancel();
-					getPromptHistoryState().savedPromptHistory = [];
+					clearSavedPromptHistory();
 					stashedEditorText = null;
 					ctx.ui.setStatus("stash", undefined);
 					restoreFooterStatusRepaintHook?.();
@@ -2146,17 +1166,9 @@ export default function statusbar(pi: ExtensionAPI) {
 					resetLayoutCache();
 					ctx.ui.notify("Statusbar disabled", "info");
 				}
-				return;
-			}
-
-			const normalizedArgs = args.trim().toLowerCase();
-			const mouseScrollMatch = /^mouse-scroll(?:\s+(on|off|toggle))?$/.exec(
-				normalizedArgs,
-			);
-			if (mouseScrollMatch) {
-				const mode = mouseScrollMatch[1] ?? "toggle";
-				config.mouseScroll =
-					mode === "toggle" ? !config.mouseScroll : mode === "on";
+			},
+			applyMouseScroll: (value, ctx) => {
+				config.mouseScroll = value;
 				if (
 					enabled &&
 					ctx.hasUI &&
@@ -2166,85 +1178,21 @@ export default function statusbar(pi: ExtensionAPI) {
 				) {
 					installFixedEditorCompositor(ctx, tuiRef);
 				}
-
-				if (
-					writeStatusbarOptionSetting(
-						ctx.cwd,
-						{ mouseScroll: config.mouseScroll },
-						config.preset,
-					)
-				) {
-					ctx.ui.notify(
-						`Statusbar mouse scroll ${config.mouseScroll ? "enabled" : "disabled"}`,
-						"info",
-					);
-				} else {
-					ctx.ui.notify(
-						`Statusbar mouse scroll ${config.mouseScroll ? "enabled" : "disabled"} (not persisted; check settings.json)`,
-						"warning",
-					);
-				}
-				return;
-			}
-
-			const fixedEditorMatch = /^fixed-editor(?:\s+(on|off|toggle))?$/.exec(
-				normalizedArgs,
-			);
-			if (fixedEditorMatch) {
-				const mode = fixedEditorMatch[1] ?? "toggle";
-				config.fixedEditor =
-					mode === "toggle" ? !config.fixedEditor : mode === "on";
+			},
+			applyFixedEditor: (value, ctx) => {
+				config.fixedEditor = value;
 				if (enabled && ctx.hasUI) {
 					setupCustomEditor(ctx);
 				}
-
-				if (
-					writeStatusbarOptionSetting(
-						ctx.cwd,
-						{ fixedEditor: config.fixedEditor },
-						config.preset,
-					)
-				) {
-					ctx.ui.notify(
-						`Statusbar fixed editor ${config.fixedEditor ? "enabled" : "disabled"}`,
-						"info",
-					);
-				} else {
-					ctx.ui.notify(
-						`Statusbar fixed editor ${config.fixedEditor ? "enabled" : "disabled"} (not persisted; check settings.json)`,
-						"warning",
-					);
-				}
-				return;
-			}
-
-			const preset = normalizePreset(args);
-			if (preset) {
+			},
+			applyPreset: (preset, ctx) => {
 				config.preset = preset;
 				resetLayoutCache();
 				if (enabled) {
 					setupCustomEditor(ctx);
 				}
-
-				if (writeStatusbarPresetSetting(preset, ctx.cwd)) {
-					ctx.ui.notify(`Preset set to: ${preset}`, "info");
-				} else {
-					ctx.ui.notify(
-						`Preset set to: ${preset} (not persisted; check settings.json)`,
-						"warning",
-					);
-				}
-				return;
-			}
-
-			// Show available presets
-			const builtInNames = Object.keys(PRESETS);
-			const userNames = Object.keys(config.presets).filter(
-				(n) => !builtInNames.includes(n),
-			);
-			const presetList = [...builtInNames, ...userNames].join(", ");
-			ctx.ui.notify(`Available presets: ${presetList}`, "info");
-		},
+			},
+		}),
 	});
 
 	pi.registerCommand("stash-history", {
@@ -2262,22 +1210,10 @@ export default function statusbar(pi: ExtensionAPI) {
 
 	pi.registerCommand("bash-mode", {
 		description: "Toggle sticky bash mode (on, off, toggle)",
-		handler: async (args, ctx) => {
-			const mode = args?.trim().toLowerCase() || "toggle";
-			if (mode === "on") {
-				await setBashModeActive(true, ctx);
-				return;
-			}
-			if (mode === "off") {
-				await setBashModeActive(false, ctx);
-				return;
-			}
-			if (mode === "toggle") {
-				await setBashModeActive(!bashModeActive, ctx);
-				return;
-			}
-			ctx.ui.notify("Usage: /bash-mode [on|off|toggle]", "warning");
-		},
+		handler: createBashModeCommandHandler({
+			setBashModeActive,
+			isBashModeActive: () => bashModeActive,
+		}),
 	});
 
 	pi.registerCommand("bash-reset", {
@@ -2364,213 +1300,14 @@ export default function statusbar(pi: ExtensionAPI) {
 	}
 
 	// ── /vibe command ─────────────────────────────────────────────────────
-	// Subcommands: off, preset whimsical, source packs|generated, generate <theme>,
-	// pack list|enable|disable|reset, safe on|off, animation shimmer|none.
-	// Writes go through writeVibeSettingAndUpdate which preserves existing
-	// statusbar structure (shorthand preset, inherited vibe) on disk.
 	pi.registerCommand("vibe", {
 		description:
 			"Manage working message vibes. Usage: /vibe [off|preset|source|generate|pack|safe|animation]",
-		handler: async (args, ctx) => {
-			const parts = args?.trim().split(/\s+/) || [];
-			const subcommand = parts[0]?.toLowerCase() ?? "";
-
-			// /vibe (no args): show current status
-			if (!args || !args.trim()) {
-				const v = config.vibe;
-				if (!v.enabled) {
-					ctx.ui.notify("Vibe: off", "info");
-					return;
-				}
-				const allPacks = getBuiltinVibePackIds();
-				const enabledCount = allPacks.length - v.disabledPacks.length;
-				let status = `Vibe: ${v.source} | Animation: ${v.animation} | Safe: ${v.safeMode ? "on" : "off"} | Packs: ${enabledCount}/${allPacks.length}`;
-				if (v.source === "generated") {
-					status += ` | Model: ${v.generated.model}`;
-				}
-				ctx.ui.notify(status, "info");
-				return;
-			}
-
-			// /vibe off
-			if (subcommand === "off") {
-				const persisted = writeVibeSettingAndUpdate(ctx.cwd, {
-					enabled: false,
-				});
-				disposeVibeManager(ctx.ui.setWorkingMessage);
-				notifyVibe(ctx, persisted, "Vibe disabled");
-				return;
-			}
-
-			// /vibe preset whimsical
-			if (subcommand === "preset") {
-				const presetName = parts[1]?.toLowerCase();
-				if (presetName !== "whimsical") {
-					ctx.ui.notify("Usage: /vibe preset whimsical", "error");
-					return;
-				}
-				const persisted = writeVibeSettingAndUpdate(ctx.cwd, {
-					enabled: true,
-					source: "packs",
-					disabledPacks: [],
-					safeMode: true,
-					animation: "shimmer",
-				});
-				notifyVibe(ctx, persisted, "Vibe preset: whimsical");
-				return;
-			}
-
-			// /vibe source packs|generated
-			if (subcommand === "source") {
-				const src = parts[1]?.toLowerCase();
-				if (src !== "packs" && src !== "generated") {
-					ctx.ui.notify("Usage: /vibe source packs|generated", "error");
-					return;
-				}
-				const persisted = writeVibeSettingAndUpdate(ctx.cwd, {
-					enabled: true,
-					source: src,
-				});
-				notifyVibe(ctx, persisted, `Vibe source: ${src}`);
-				return;
-			}
-
-			// /vibe generate <theme>
-			if (subcommand === "generate") {
-				const theme = parts.slice(1).join(" ");
-				if (!theme) {
-					ctx.ui.notify("Usage: /vibe generate <theme>", "error");
-					return;
-				}
-				const persisted = writeVibeSettingAndUpdate(ctx.cwd, {
-					enabled: true,
-					source: "generated",
-					generated: {
-						prompt: DEFAULT_GENERATED_VIBE_PROMPT.replace(/\{theme\}/g, theme),
-					},
-				});
-				notifyVibe(ctx, persisted, `Vibe generate theme: ${theme}`);
-				return;
-			}
-
-			// /vibe pack list|enable|disable|reset
-			if (subcommand === "pack") {
-				const packCmd = parts[1]?.toLowerCase();
-
-				if (packCmd === "list" || !packCmd) {
-					const packs = BUILTIN_VIBE_PACKS;
-					const disabled = new Set(config.vibe.disabledPacks);
-					const lines = packs.map(
-						(p) =>
-							`${disabled.has(p.id) ? "✗" : "✓"} ${p.id} (${p.label}, ${p.messages.length} msgs)`,
-					);
-					ctx.ui.notify(lines.join("\n"), "info");
-					return;
-				}
-
-				if (packCmd === "disable") {
-					const packId = parts[2]?.toLowerCase();
-					const validIds = getBuiltinVibePackIds();
-					if (!packId || !validIds.includes(packId)) {
-						ctx.ui.notify(
-							`Usage: /vibe pack disable <pack-id>\nAvailable: ${validIds.join(", ")}`,
-							"error",
-						);
-						return;
-					}
-					const disabled = new Set(config.vibe.disabledPacks);
-					if (disabled.has(packId)) {
-						ctx.ui.notify(`Pack "${packId}" already disabled`, "info");
-						return;
-					}
-					const persisted = writeVibeSettingAndUpdate(ctx.cwd, {
-						disabledPacks: [...config.vibe.disabledPacks, packId],
-					});
-					notifyVibe(ctx, persisted, `Pack disabled: ${packId}`);
-					return;
-				}
-
-				if (packCmd === "enable") {
-					const packId = parts[2]?.toLowerCase();
-					const validIds = getBuiltinVibePackIds();
-					if (!packId || !validIds.includes(packId)) {
-						ctx.ui.notify(
-							`Usage: /vibe pack enable <pack-id>\nAvailable: ${validIds.join(", ")}`,
-							"error",
-						);
-						return;
-					}
-					const persisted = writeVibeSettingAndUpdate(ctx.cwd, {
-						disabledPacks: config.vibe.disabledPacks.filter(
-							(id) => id !== packId,
-						),
-					});
-					notifyVibe(ctx, persisted, `Pack enabled: ${packId}`);
-					return;
-				}
-
-				if (packCmd === "reset") {
-					const persisted = writeVibeSettingAndUpdate(ctx.cwd, {
-						disabledPacks: [],
-					});
-					notifyVibe(ctx, persisted, "All packs enabled");
-					return;
-				}
-
-				ctx.ui.notify("Usage: /vibe pack [list|enable|disable|reset]", "error");
-				return;
-			}
-
-			// /vibe safe on|off
-			if (subcommand === "safe") {
-				const mode = parts[1]?.toLowerCase();
-				if (mode !== "on" && mode !== "off") {
-					ctx.ui.notify("Usage: /vibe safe on|off", "error");
-					return;
-				}
-				const persisted = writeVibeSettingAndUpdate(ctx.cwd, {
-					safeMode: mode === "on",
-				});
-				notifyVibe(ctx, persisted, `Safe mode: ${mode}`);
-				return;
-			}
-
-			// /vibe animation shimmer|none
-			if (subcommand === "animation") {
-				const anim = parts[1]?.toLowerCase();
-				if (anim !== "shimmer" && anim !== "none") {
-					ctx.ui.notify("Usage: /vibe animation shimmer|none", "error");
-					return;
-				}
-				const persisted = writeVibeSettingAndUpdate(ctx.cwd, {
-					animation: anim,
-				});
-				notifyVibe(ctx, persisted, `Vibe animation: ${anim}`);
-				return;
-			}
-
-			// Legacy command redirects
-			if (subcommand === "mode") {
-				ctx.ui.notify(
-					"/vibe mode removed. Use: /vibe source packs|generated",
-					"warning",
-				);
-				return;
-			}
-			if (subcommand === "model") {
-				ctx.ui.notify(
-					"/vibe model removed. Edit statusbar.vibe.generated.model in settings.json",
-					"warning",
-				);
-				return;
-			}
-
-			// Unknown subcommand
-			ctx.ui.notify(
-				"Usage: /vibe [off|preset|source|generate|pack|safe|animation]",
-				"error",
-			);
-		},
+		handler: createVibeCommandHandler({
+			getVibeConfig: () => config.vibe,
+			writeVibeSettingAndUpdate,
+			disposeVibeManager,
+		}),
 	});
 
 	function buildSegmentContext(
@@ -2722,7 +1459,12 @@ export default function statusbar(pi: ExtensionAPI) {
 		const segmentCtx = buildSegmentContext(currentCtx, theme, presetDef);
 
 		lastLayoutWidth = width;
-		lastLayoutResult = computeResponsiveLayout(segmentCtx, presetDef, width);
+		lastLayoutResult = computeResponsiveLayout(
+			segmentCtx,
+			presetDef,
+			width,
+			config.customItems,
+		);
 		lastLayoutTimestamp = now;
 		layoutDirty = false;
 		forceNextLayoutRecompute = false;
@@ -3285,8 +2027,8 @@ export default function statusbar(pi: ExtensionAPI) {
 			});
 
 			currentEditor = editor;
-			trackPromptHistory(editor);
-			restorePromptHistory(editor);
+			trackPromptHistory(editor as unknown as PromptHistoryEditor);
+			restorePromptHistory(editor as unknown as PromptHistoryEditor);
 			attachAutocompleteProvider();
 
 			const originalHandleInput = editor.handleInput.bind(editor);
@@ -3308,7 +2050,7 @@ export default function statusbar(pi: ExtensionAPI) {
 
 				if (!autocompleteFixed && !getInstalledAutocompleteProvider()) {
 					autocompleteFixed = true;
-					snapshotPromptHistory(editor);
+					snapshotPromptHistory(editor as unknown as PromptHistoryEditor);
 					ctx.ui.setEditorComponent(editorFactory);
 					if (config.fixedEditor) {
 						installFixedEditorCompositor(ctx, tui);

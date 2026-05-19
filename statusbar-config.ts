@@ -1,6 +1,7 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
+import { isRecord } from "./core/stash-helpers.ts";
 import { getDefaultColors } from "./theme.ts";
-import { parseVibeConfig, type VibeConfig } from "./vibe-config.ts";
+import { parseVibeConfig, type VibeConfig } from "./vibes/config.ts";
 import type {
 	BuiltinStatusLineSegmentId,
 	ColorScheme,
@@ -24,10 +25,6 @@ export interface StatusbarConfig {
 	fixedEditor: boolean;
 	/** Vibe (whimsical working message) config. Parsed via {@link parseVibeConfig}. */
 	vibe: VibeConfig;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function normalizeBuiltinPreset(
