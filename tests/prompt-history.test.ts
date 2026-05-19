@@ -171,6 +171,24 @@ test("trackPromptHistory re-snapshots if already tracked", () => {
 	assert.ok(state.savedPromptHistory.includes("second"));
 });
 
+test("trackPromptHistory updates the auto-snapshot limit when retracked", () => {
+	clearGlobalState();
+
+	const editor = {
+		history: ["first", "second", "third"] as string[],
+		addToHistory(text: string) {
+			this.history.unshift(text);
+		},
+	};
+
+	trackPromptHistory(editor, 1);
+	trackPromptHistory(editor, 3);
+	editor.addToHistory("new-entry");
+
+	const state = Reflect.get(globalThis, PROMPT_HISTORY_STATE_KEY) as any;
+	assert.deepEqual(state.savedPromptHistory, ["new-entry", "first", "second"]);
+});
+
 // ── clearSavedPromptHistory ─────────────────────────────────────────────
 
 test("clearSavedPromptHistory wipes saved state", () => {

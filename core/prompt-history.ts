@@ -8,6 +8,9 @@ import { isRecord, normalizeHistoryLimit } from "./stash-helpers.ts";
 const PROMPT_HISTORY_TRACKED = Symbol.for(
 	"@bumpyclock/pi-statusbar/promptHistoryTracked",
 );
+const PROMPT_HISTORY_LIMIT = Symbol.for(
+	"@bumpyclock/pi-statusbar/promptHistoryLimit",
+);
 export const PROMPT_HISTORY_STATE_KEY = Symbol.for(
 	"@bumpyclock/pi-statusbar/promptHistoryState",
 );
@@ -99,6 +102,7 @@ export function trackPromptHistory(
 	limit = 100,
 ): void {
 	if (!editor || typeof editor.addToHistory !== "function") return;
+	editor[PROMPT_HISTORY_LIMIT] = limit;
 	if (editor[PROMPT_HISTORY_TRACKED]) {
 		snapshotPromptHistory(editor, limit);
 		return;
@@ -107,7 +111,11 @@ export function trackPromptHistory(
 	const originalAddToHistory = editor.addToHistory.bind(editor);
 	editor.addToHistory = (text: string) => {
 		originalAddToHistory(text);
-		snapshotPromptHistory(editor, limit);
+		const trackedLimit = editor[PROMPT_HISTORY_LIMIT];
+		snapshotPromptHistory(
+			editor,
+			typeof trackedLimit === "number" ? trackedLimit : limit,
+		);
 	};
 	editor[PROMPT_HISTORY_TRACKED] = true;
 	snapshotPromptHistory(editor, limit);
