@@ -19,11 +19,16 @@ export function buildStashPreview(text: string, maxWidth: number): string {
 	return truncateToWidth(compact, maxWidth, "…");
 }
 
+export function normalizeHistoryLimit(limit: number): number {
+	if (!Number.isFinite(limit) || limit <= 0) return 0;
+	return Math.floor(limit);
+}
+
 export function normalizeStashHistoryEntries(
 	value: unknown,
 	limit: number,
 ): string[] {
-	const maxEntries = Math.max(0, Math.floor(limit));
+	const maxEntries = normalizeHistoryLimit(limit);
 	if (maxEntries === 0 || !Array.isArray(value)) {
 		return [];
 	}
@@ -56,7 +61,7 @@ export function pushStashHistory(
 	text: string,
 	limit: number,
 ): boolean {
-	const maxEntries = Math.max(0, Math.floor(limit));
+	const maxEntries = normalizeHistoryLimit(limit);
 	if (maxEntries === 0) return false;
 	if (!hasNonWhitespaceText(text)) return false;
 	if (history[0] === text) return false;

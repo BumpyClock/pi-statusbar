@@ -67,6 +67,14 @@ test("normalizeStashHistoryEntries respects limit", () => {
 	assert.deepEqual(result, ["entry-0", "entry-1", "entry-2", "entry-3", "entry-4"]);
 });
 
+test("normalizeStashHistoryEntries rejects non-finite limits", () => {
+	assert.deepEqual(normalizeStashHistoryEntries(["a", "b"], Number.NaN), []);
+	assert.deepEqual(
+		normalizeStashHistoryEntries(["a", "b"], Number.POSITIVE_INFINITY),
+		[],
+	);
+});
+
 test("normalizeStashHistoryEntries returns empty for non-array", () => {
 	assert.deepEqual(normalizeStashHistoryEntries(null, LIMIT), []);
 	assert.deepEqual(normalizeStashHistoryEntries("not-array", LIMIT), []);
@@ -102,6 +110,12 @@ test("pushStashHistory truncates to limit", () => {
 	pushStashHistory(history, "new", 4);
 	assert.equal(history.length, 4);
 	assert.equal(history[0], "new");
+});
+
+test("pushStashHistory rejects non-finite limits", () => {
+	const history = ["old"];
+	assert.equal(pushStashHistory(history, "new", Number.NaN), false);
+	assert.deepEqual(history, ["old"]);
 });
 
 test("pushStashHistory mutates the array in place", () => {

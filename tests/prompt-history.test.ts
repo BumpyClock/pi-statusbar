@@ -40,6 +40,12 @@ test("readPromptHistory respects limit", () => {
 	assert.deepEqual(readPromptHistory(editor, 3), ["a", "b", "c"]);
 });
 
+test("readPromptHistory rejects non-finite limits", () => {
+	const editor = { history: ["a", "b", "c"] };
+	assert.deepEqual(readPromptHistory(editor, Number.NaN), []);
+	assert.deepEqual(readPromptHistory(editor, Number.POSITIVE_INFINITY), []);
+});
+
 test("readPromptHistory skips non-string entries", () => {
 	const editor = { history: ["a", 42, null, "b"] };
 	assert.deepEqual(readPromptHistory(editor), ["a", "b"]);

@@ -3,7 +3,7 @@
  * Uses global symbols to survive extension reloads within the same process.
  */
 
-import { isRecord } from "./stash-helpers.ts";
+import { isRecord, normalizeHistoryLimit } from "./stash-helpers.ts";
 
 const PROMPT_HISTORY_TRACKED = Symbol.for(
 	"@bumpyclock/pi-statusbar/promptHistoryTracked",
@@ -54,7 +54,7 @@ export function readPromptHistory(
 	editor: PromptHistoryEditor | null | undefined,
 	limit = 100,
 ): string[] {
-	const maxEntries = Math.max(0, Math.floor(limit));
+	const maxEntries = normalizeHistoryLimit(limit);
 	if (maxEntries === 0) return [];
 
 	const history = editor?.history;

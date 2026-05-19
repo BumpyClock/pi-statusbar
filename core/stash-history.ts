@@ -15,6 +15,7 @@ import { homedir } from "node:os";
 
 import {
 	isRecord,
+	normalizeHistoryLimit,
 	normalizeStashHistoryEntries,
 	getPromptHistoryText,
 	hasNonWhitespaceText,
@@ -40,7 +41,7 @@ export function getProjectSessionsPath(cwd: string): string {
 }
 
 export function readRecentProjectPrompts(cwd: string, limit: number): string[] {
-	const maxEntries = Math.max(0, Math.floor(limit));
+	const maxEntries = normalizeHistoryLimit(limit);
 	if (maxEntries === 0) return [];
 
 	const sessionsPath = getProjectSessionsPath(cwd);
@@ -140,7 +141,7 @@ export function readRecentProjectPrompts(cwd: string, limit: number): string[] {
 }
 
 export function readPersistedStashHistory(limit: number): string[] {
-	const maxEntries = Math.max(0, Math.floor(limit));
+	const maxEntries = normalizeHistoryLimit(limit);
 	if (maxEntries === 0) return [];
 
 	const stashHistoryPath = getStashHistoryPath();
@@ -170,7 +171,7 @@ export function readPersistedStashHistory(limit: number): string[] {
 
 export function persistStashHistory(history: string[], limit: number): void {
 	const stashHistoryPath = getStashHistoryPath();
-	const maxEntries = Math.max(0, Math.floor(limit));
+	const maxEntries = normalizeHistoryLimit(limit);
 	const payload = {
 		version: 1,
 		history: history.slice(0, maxEntries),
