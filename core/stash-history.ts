@@ -33,25 +33,47 @@ export function getSessionsPath(): string {
 export function getProjectSessionsPath(cwd: string): string {
 	const projectKey = cwd
 		.replace(/^[/\\]+|[/\\]+$/g, "")
+		.replace(/:/g, "-")
 		.replace(/[\\/]+/g, "-");
 
 	return join(getSessionsPath(), `--${projectKey}--`);
 }
 
 export function readRecentProjectPrompts(cwd: string, limit: number): string[] {
+	const maxEntries = Math.max(0, Math.floor(limit));
+	if (maxEntries === 0) return [];
+
 	const sessionsPath = getProjectSessionsPath(cwd);
 	if (!existsSync(sessionsPath)) {
 		return [];
 	}
 
 	const promptEntries: { text: string; timestamp: number }[] = [];
-	const fileNames = readdirSync(sessionsPath).filter((fileName) =>
-		fileName.endsWith(".jsonl"),
-	);
+	let fileNames: string[];
+	try {
+		fileNames = readdirSync(sessionsPath).filter((fileName) =>
+			fileName.endsWith(".jsonl"),
+		);
+	} catch (error) {
+		console.debug(
+			`[pi-statusbar] Failed to read sessions dir ${sessionsPath}:`,
+			error,
+		);
+		return [];
+	}
 
 	for (const fileName of fileNames) {
 		const filePath = join(sessionsPath, fileName);
-		const lines = readFileSync(filePath, "utf-8").split("\n");
+		let lines: string[];
+		try {
+			lines = readFileSync(filePath, "utf-8").split("\n");
+		} catch (error) {
+			console.debug(
+				`[pi-statusbar] Failed to read session file ${filePath}:`,
+				error,
+			);
+			continue;
+		}
 
 		for (let i = lines.length - 1; i >= 0; i--) {
 			const line = lines[i];
@@ -113,7 +135,7 @@ export function readRecentProjectPrompts(cwd: string, limit: number): string[] {
 
 		seen.add(entry.text);
 		prompts.push(entry.text);
-		if (prompts.length >= limit) {
+		if (prompts.length >= maxEntries) {
 			return prompts;
 		}
 	}
@@ -122,6 +144,9 @@ export function readRecentProjectPrompts(cwd: string, limit: number): string[] {
 }
 
 export function readPersistedStashHistory(limit: number): string[] {
+	const maxEntries = Math.max(0, Math.floor(limit));
+	if (maxEntries === 0) return [];
+
 	const stashHistoryPath = getStashHistoryPath();
 
 	try {
@@ -137,7 +162,7 @@ export function readPersistedStashHistory(limit: number): string[] {
 			return [];
 		}
 
-		return normalizeStashHistoryEntries(parsed.history, limit);
+		return normalizeStashHistoryEntries(parsed.history, maxEntries);
 	} catch (error) {
 		console.debug(
 			`[pi-statusbar] Failed to read stash history from ${stashHistoryPath}:`,
@@ -149,9 +174,10 @@ export function readPersistedStashHistory(limit: number): string[] {
 
 export function persistStashHistory(history: string[], limit: number): void {
 	const stashHistoryPath = getStashHistoryPath();
+	const maxEntries = Math.max(0, Math.floor(limit));
 	const payload = {
 		version: 1,
-		history: history.slice(0, limit),
+		history: history.slice(0, maxEntries),
 	};
 
 	try {

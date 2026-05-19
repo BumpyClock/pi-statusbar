@@ -27,16 +27,20 @@ export function renderSegmentWithWidth(
 	};
 }
 
+function renderSeparator(presetDef: PresetDef): string {
+	const separatorDef = getSeparator(presetDef.separator);
+	const sepAnsi = getFgAnsiCode("sep");
+	const sep = separatorDef.left;
+	return ` ${sepAnsi}${sep}${ansi.reset} `;
+}
+
 /** Build content string from pre-rendered parts */
 export function buildContentFromParts(
 	parts: string[],
 	presetDef: PresetDef,
 ): string {
 	if (parts.length === 0) return "";
-	const separatorDef = getSeparator(presetDef.separator);
-	const sepAnsi = getFgAnsiCode("sep");
-	const sep = separatorDef.left;
-	return " " + parts.join(` ${sepAnsi}${sep}${ansi.reset} `) + ansi.reset + " ";
+	return " " + parts.join(renderSeparator(presetDef)) + ansi.reset + " ";
 }
 
 /**
@@ -52,8 +56,7 @@ export function computeResponsiveLayout(
 	availableWidth: number,
 	customItems: readonly CustomStatusItem[],
 ): { topContent: string; secondaryContent: string } {
-	const separatorDef = getSeparator(presetDef.separator);
-	const sepWidth = visibleWidth(separatorDef.left) + 2; // separator + spaces around it
+	const sepWidth = visibleWidth(renderSeparator(presetDef));
 
 	// Get all segments: primary first, then secondary
 	const mergedSegments = mergeSegmentsWithCustomItems(presetDef, customItems);

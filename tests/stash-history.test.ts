@@ -20,7 +20,10 @@ test("getStashHistoryPath returns path under .pi/agent/pi-statusbar", () => {
 	const path = getStashHistoryPath();
 	assert.ok(path.includes(".pi"), "should include .pi");
 	assert.ok(path.includes("pi-statusbar"), "should include pi-statusbar");
-	assert.ok(path.endsWith("stash-history.json"), "should end with stash-history.json");
+	assert.ok(
+		path.endsWith("stash-history.json"),
+		"should end with stash-history.json",
+	);
 });
 
 test("getSessionsPath returns path under .pi/agent/sessions", () => {
@@ -41,16 +44,28 @@ test("getProjectSessionsPath strips leading/trailing slashes", () => {
 	assert.ok(path2.includes("--foo-bar--"));
 });
 
+test("getProjectSessionsPath mirrors Pi session key colon handling", () => {
+	const path = getProjectSessionsPath("C:\\Users\\me\\proj");
+	assert.ok(path.includes("--C--Users-me-proj--"));
+});
+
 // ── readPersistedStashHistory / persistStashHistory ──────────────────────
 
 test("persistStashHistory + readPersistedStashHistory round-trip", (t) => {
 	const originalHome = process.env.HOME;
-	const tmpHome = join(tmpdir(), `pi-stash-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+	const tmpHome = join(
+		tmpdir(),
+		`pi-stash-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+	);
 	process.env.HOME = tmpHome;
 
 	t.after(() => {
 		process.env.HOME = originalHome;
-		try { rmSync(tmpHome, { recursive: true, force: true }); } catch { /* cleanup */ }
+		try {
+			rmSync(tmpHome, { recursive: true, force: true });
+		} catch {
+			/* cleanup */
+		}
 	});
 
 	const history = ["entry-one", "entry-two", "entry-three"];
@@ -62,12 +77,19 @@ test("persistStashHistory + readPersistedStashHistory round-trip", (t) => {
 
 test("readPersistedStashHistory returns empty when file missing", (t) => {
 	const originalHome = process.env.HOME;
-	const tmpHome = join(tmpdir(), `pi-stash-empty-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+	const tmpHome = join(
+		tmpdir(),
+		`pi-stash-empty-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+	);
 	process.env.HOME = tmpHome;
 
 	t.after(() => {
 		process.env.HOME = originalHome;
-		try { rmSync(tmpHome, { recursive: true, force: true }); } catch { /* cleanup */ }
+		try {
+			rmSync(tmpHome, { recursive: true, force: true });
+		} catch {
+			/* cleanup */
+		}
 	});
 
 	const result = readPersistedStashHistory(LIMIT);
@@ -76,12 +98,19 @@ test("readPersistedStashHistory returns empty when file missing", (t) => {
 
 test("persistStashHistory respects limit", (t) => {
 	const originalHome = process.env.HOME;
-	const tmpHome = join(tmpdir(), `pi-stash-limit-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+	const tmpHome = join(
+		tmpdir(),
+		`pi-stash-limit-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+	);
 	process.env.HOME = tmpHome;
 
 	t.after(() => {
 		process.env.HOME = originalHome;
-		try { rmSync(tmpHome, { recursive: true, force: true }); } catch { /* cleanup */ }
+		try {
+			rmSync(tmpHome, { recursive: true, force: true });
+		} catch {
+			/* cleanup */
+		}
 	});
 
 	const history = Array.from({ length: 20 }, (_, i) => `entry-${i}`);
@@ -89,7 +118,13 @@ test("persistStashHistory respects limit", (t) => {
 
 	const result = readPersistedStashHistory(5);
 	assert.equal(result.length, 5);
-	assert.deepEqual(result, ["entry-0", "entry-1", "entry-2", "entry-3", "entry-4"]);
+	assert.deepEqual(result, [
+		"entry-0",
+		"entry-1",
+		"entry-2",
+		"entry-3",
+		"entry-4",
+	]);
 });
 
 // ── readRecentProjectPrompts ─────────────────────────────────────────────
@@ -101,12 +136,19 @@ test("readRecentProjectPrompts returns empty for non-existent project path", () 
 
 test("readRecentProjectPrompts reads user messages from session files", (t) => {
 	const originalHome = process.env.HOME;
-	const tmpHome = join(tmpdir(), `pi-prompts-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+	const tmpHome = join(
+		tmpdir(),
+		`pi-prompts-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+	);
 	process.env.HOME = tmpHome;
 
 	t.after(() => {
 		process.env.HOME = originalHome;
-		try { rmSync(tmpHome, { recursive: true, force: true }); } catch { /* cleanup */ }
+		try {
+			rmSync(tmpHome, { recursive: true, force: true });
+		} catch {
+			/* cleanup */
+		}
 	});
 
 	const cwd = "/test/project";
@@ -133,12 +175,19 @@ test("readRecentProjectPrompts reads user messages from session files", (t) => {
 
 test("readRecentProjectPrompts deduplicates across sessions", (t) => {
 	const originalHome = process.env.HOME;
-	const tmpHome = join(tmpdir(), `pi-dedup-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+	const tmpHome = join(
+		tmpdir(),
+		`pi-dedup-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+	);
 	process.env.HOME = tmpHome;
 
 	t.after(() => {
 		process.env.HOME = originalHome;
-		try { rmSync(tmpHome, { recursive: true, force: true }); } catch { /* cleanup */ }
+		try {
+			rmSync(tmpHome, { recursive: true, force: true });
+		} catch {
+			/* cleanup */
+		}
 	});
 
 	const cwd = "/test/dedup";
@@ -165,12 +214,19 @@ test("readRecentProjectPrompts deduplicates across sessions", (t) => {
 
 test("readRecentProjectPrompts respects limit", (t) => {
 	const originalHome = process.env.HOME;
-	const tmpHome = join(tmpdir(), `pi-limit-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+	const tmpHome = join(
+		tmpdir(),
+		`pi-limit-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+	);
 	process.env.HOME = tmpHome;
 
 	t.after(() => {
 		process.env.HOME = originalHome;
-		try { rmSync(tmpHome, { recursive: true, force: true }); } catch { /* cleanup */ }
+		try {
+			rmSync(tmpHome, { recursive: true, force: true });
+		} catch {
+			/* cleanup */
+		}
 	});
 
 	const cwd = "/test/limit";
@@ -192,12 +248,19 @@ test("readRecentProjectPrompts respects limit", (t) => {
 
 test("readRecentProjectPrompts skips non-user messages", (t) => {
 	const originalHome = process.env.HOME;
-	const tmpHome = join(tmpdir(), `pi-skip-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+	const tmpHome = join(
+		tmpdir(),
+		`pi-skip-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+	);
 	process.env.HOME = tmpHome;
 
 	t.after(() => {
 		process.env.HOME = originalHome;
-		try { rmSync(tmpHome, { recursive: true, force: true }); } catch { /* cleanup */ }
+		try {
+			rmSync(tmpHome, { recursive: true, force: true });
+		} catch {
+			/* cleanup */
+		}
 	});
 
 	const cwd = "/test/skip";

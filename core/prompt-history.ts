@@ -50,7 +50,13 @@ function getPromptHistoryState(): PromptHistoryState {
 	return state;
 }
 
-export function readPromptHistory(editor: PromptHistoryEditor | null | undefined, limit = 100): string[] {
+export function readPromptHistory(
+	editor: PromptHistoryEditor | null | undefined,
+	limit = 100,
+): string[] {
+	const maxEntries = Math.max(0, Math.floor(limit));
+	if (maxEntries === 0) return [];
+
 	const history = editor?.history;
 	if (!Array.isArray(history)) return [];
 
@@ -62,20 +68,25 @@ export function readPromptHistory(editor: PromptHistoryEditor | null | undefined
 		if (normalized.length > 0 && normalized[normalized.length - 1] === trimmed)
 			continue;
 		normalized.push(trimmed);
-		if (normalized.length >= limit) break;
+		if (normalized.length >= maxEntries) break;
 	}
 
 	return normalized;
 }
 
-export function snapshotPromptHistory(editor: PromptHistoryEditor | null | undefined, limit = 100): void {
+export function snapshotPromptHistory(
+	editor: PromptHistoryEditor | null | undefined,
+	limit = 100,
+): void {
 	const history = readPromptHistory(editor, limit);
 	if (history.length > 0) {
 		getPromptHistoryState().savedPromptHistory = [...history];
 	}
 }
 
-export function restorePromptHistory(editor: PromptHistoryEditor | null | undefined): void {
+export function restorePromptHistory(
+	editor: PromptHistoryEditor | null | undefined,
+): void {
 	const { savedPromptHistory } = getPromptHistoryState();
 	if (!savedPromptHistory.length || typeof editor?.addToHistory !== "function")
 		return;
@@ -85,7 +96,10 @@ export function restorePromptHistory(editor: PromptHistoryEditor | null | undefi
 	}
 }
 
-export function trackPromptHistory(editor: PromptHistoryEditor | null | undefined, limit = 100): void {
+export function trackPromptHistory(
+	editor: PromptHistoryEditor | null | undefined,
+	limit = 100,
+): void {
 	if (!editor || typeof editor.addToHistory !== "function") return;
 	if (editor[PROMPT_HISTORY_TRACKED]) {
 		snapshotPromptHistory(editor, limit);

@@ -38,7 +38,7 @@ const THEME = {
 };
 
 // Color name to ANSI code mapping
-type ColorName = "sep" | "model" | "path" | "gitClean" | "accent";
+export type ColorName = "sep" | "model" | "path" | "gitClean" | "accent";
 
 function getAnsiCode(color: ColorName): string {
 	const value = THEME[color as keyof typeof THEME];

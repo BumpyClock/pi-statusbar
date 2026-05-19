@@ -173,26 +173,29 @@ function buildRightColumn(data: WelcomeData, colWidth: number): string[] {
 	];
 }
 
+function calculateWelcomeBoxWidth(termWidth: number): number | null {
+	// Minimum width for two-column layout: leftCol(26) + separator(3) + minRightCol(15) = 44
+	const minLayoutWidth = 44;
+	if (termWidth < minLayoutWidth) return null;
+
+	const minWidth = 76;
+	const maxWidth = 96;
+	// Clamp to termWidth to prevent crash on narrow terminals
+	return Math.min(
+		termWidth,
+		Math.max(minWidth, Math.min(termWidth - 2, maxWidth)),
+	);
+}
+
 function renderWelcomeBox(
 	data: WelcomeData,
 	termWidth: number,
 	bottomLine: string,
 ): string[] {
-	// Minimum width for two-column layout: leftCol(26) + separator(3) + minRightCol(15) = 44
-	const minLayoutWidth = 44;
-
-	// If terminal is too narrow for the layout, return empty (skip welcome box)
-	if (termWidth < minLayoutWidth) {
+	const boxWidth = calculateWelcomeBoxWidth(termWidth);
+	if (boxWidth === null) {
 		return [];
 	}
-
-	const minWidth = 76;
-	const maxWidth = 96;
-	// Clamp to termWidth to prevent crash on narrow terminals
-	const boxWidth = Math.min(
-		termWidth,
-		Math.max(minWidth, Math.min(termWidth - 2, maxWidth)),
-	);
 	const leftCol = 26;
 	const rightCol = Math.max(1, boxWidth - leftCol - 3); // Ensure rightCol is at least 1
 
@@ -264,19 +267,10 @@ export class WelcomeComponent implements Component {
 	invalidate(): void {}
 
 	render(termWidth: number): string[] {
-		// Minimum width for two-column layout (must match renderWelcomeBox)
-		const minLayoutWidth = 44;
-		if (termWidth < minLayoutWidth) {
+		const boxWidth = calculateWelcomeBoxWidth(termWidth);
+		if (boxWidth === null) {
 			return [];
 		}
-
-		const minWidth = 76;
-		const maxWidth = 96;
-		// Clamp to termWidth to prevent crash on narrow terminals
-		const boxWidth = Math.min(
-			termWidth,
-			Math.max(minWidth, Math.min(termWidth - 2, maxWidth)),
-		);
 
 		// Bottom line with countdown
 		const countdownText = ` Press any key to continue (${this.countdown}s) `;
@@ -319,19 +313,10 @@ export class WelcomeHeader implements Component {
 	invalidate(): void {}
 
 	render(termWidth: number): string[] {
-		// Minimum width for two-column layout (must match renderWelcomeBox)
-		const minLayoutWidth = 44;
-		if (termWidth < minLayoutWidth) {
+		const boxWidth = calculateWelcomeBoxWidth(termWidth);
+		if (boxWidth === null) {
 			return [];
 		}
-
-		const minWidth = 76;
-		const maxWidth = 96;
-		// Clamp to termWidth to prevent crash on narrow terminals
-		const boxWidth = Math.min(
-			termWidth,
-			Math.max(minWidth, Math.min(termWidth - 2, maxWidth)),
-		);
 		const hChar = "─";
 
 		// Bottom line with column separator (leftCol=26, rightCol=boxWidth-29)
@@ -353,17 +338,24 @@ export class WelcomeHeader implements Component {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const loggedDiscoveryErrors = new Set<string>();
+const maxLoggedDiscoveryErrors = 500;
+
+function rememberDiscoveryError(key: string): boolean {
+	if (loggedDiscoveryErrors.has(key)) return false;
+	while (loggedDiscoveryErrors.size >= maxLoggedDiscoveryErrors) {
+		const oldest = loggedDiscoveryErrors.values().next().value;
+		if (!oldest) break;
+		loggedDiscoveryErrors.delete(oldest);
+	}
+	loggedDiscoveryErrors.add(key);
+	return true;
+}
 
 function logDiscoveryError(scope: string, error: unknown): void {
 	const message = error instanceof Error ? error.message : String(error);
 	const key = `${scope}:${message}`;
-	if (loggedDiscoveryErrors.has(key)) {
+	if (!rememberDiscoveryError(key)) {
 		return;
-	}
-
-	loggedDiscoveryErrors.add(key);
-	if (loggedDiscoveryErrors.size > 500) {
-		loggedDiscoveryErrors.clear();
 	}
 
 	console.debug(`[statusbar-welcome] ${scope}:`, error);
@@ -647,17 +639,20 @@ export function getRecentSessions(maxCount: number = 3): RecentSession[] {
 	];
 
 	const sessions: { name: string; mtime: number }[] = [];
+	const maxSessionScanDepth = 10;
 
-	function scanDir(dir: string) {
+	function scanDir(dir: string, currentDepth = 0) {
+		if (currentDepth >= maxSessionScanDepth) return;
 		if (!existsSync(dir)) return;
 		try {
 			const entries = readdirSync(dir);
 			for (const entry of entries) {
 				const entryPath = join(dir, entry);
 				try {
-					const stats = statSync(entryPath);
+					const stats = lstatSync(entryPath);
+					if (stats.isSymbolicLink()) continue;
 					if (stats.isDirectory()) {
-						scanDir(entryPath);
+						scanDir(entryPath, currentDepth + 1);
 					} else if (entry.endsWith(".jsonl")) {
 						const parentName = basename(dir);
 						let projectName = parentName;

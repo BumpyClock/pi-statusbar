@@ -5,11 +5,7 @@ import {
 	computeResponsiveLayout,
 	buildContentFromParts,
 } from "../statusbar/layout.ts";
-import type {
-	PresetDef,
-	SegmentContext,
-	CustomStatusItem,
-} from "../types.ts";
+import type { PresetDef, SegmentContext, CustomStatusItem } from "../types.ts";
 import { getDefaultColors } from "../theme/index.ts";
 
 // ─── helpers ──────────────────────────────────────────────────────────────
@@ -17,15 +13,19 @@ import { getDefaultColors } from "../theme/index.ts";
 /** Minimal stub theme that passes through text unchanged */
 const stubTheme = { fg: (_color: string, text: string) => text };
 
-function makeContext(
-	overrides: Partial<SegmentContext> = {},
-): SegmentContext {
+function makeContext(overrides: Partial<SegmentContext> = {}): SegmentContext {
 	return {
 		model: { id: "test-model", name: "Test", contextWindow: 200000 },
 		thinkingLevel: "off",
 		sessionId: "test-session",
 		cwd: "/tmp/test",
-		usageStats: { input: 1000, output: 500, cacheRead: 0, cacheWrite: 0, cost: 0.01 },
+		usageStats: {
+			input: 1000,
+			output: 500,
+			cacheRead: 0,
+			cacheWrite: 0,
+			cost: 0.01,
+		},
 		contextPercent: 12,
 		contextWindow: 200000,
 		autoCompactEnabled: true,
@@ -79,6 +79,33 @@ test("buildContentFromParts joins multiple parts with separator", () => {
 	assert.ok(result.includes(">"), "expected ascii separator in output");
 });
 
+test("buildContentFromParts owns spacing for slash and pipe separators", () => {
+	assert.equal(
+		buildContentFromParts(["aaa", "bbb"], {
+			...tinyPreset,
+			separator: "slash",
+		}),
+		` aaa \x1b[38;5;244m/\x1b[0m bbb\x1b[0m `,
+	);
+	assert.equal(
+		buildContentFromParts(["aaa", "bbb"], {
+			...tinyPreset,
+			separator: "pipe",
+		}),
+		` aaa \x1b[38;5;244m|\x1b[0m bbb\x1b[0m `,
+	);
+});
+
+test("buildContentFromParts keeps single separator spacing for none", () => {
+	assert.equal(
+		buildContentFromParts(["aaa", "bbb"], {
+			...tinyPreset,
+			separator: "none",
+		}),
+		` aaa \x1b[38;5;244m \x1b[0m bbb\x1b[0m `,
+	);
+});
+
 // ─── computeResponsiveLayout: overflow behavior ─────────────────────────
 
 test("computeResponsiveLayout fits all segments on wide terminal", () => {
@@ -87,7 +114,11 @@ test("computeResponsiveLayout fits all segments on wide terminal", () => {
 
 	// Wide enough → everything in top, nothing in secondary
 	assert.ok(layout.topContent.length > 0, "topContent should have content");
-	assert.equal(layout.secondaryContent, "", "secondaryContent should be empty when wide enough");
+	assert.equal(
+		layout.secondaryContent,
+		"",
+		"secondaryContent should be empty when wide enough",
+	);
 });
 
 test("computeResponsiveLayout overflows to secondary row on narrow terminal", () => {
@@ -98,10 +129,18 @@ test("computeResponsiveLayout overflows to secondary row on narrow terminal", ()
 	const fullWidth = visibleWidth(wide.topContent);
 
 	// Now use width smaller than the total → should force overflow
-	const narrow = computeResponsiveLayout(ctx, tinyPreset, Math.max(10, fullWidth - 5), []);
+	const narrow = computeResponsiveLayout(
+		ctx,
+		tinyPreset,
+		Math.max(10, fullWidth - 5),
+		[],
+	);
 
 	assert.ok(narrow.topContent.length > 0, "still has top content");
-	assert.ok(narrow.secondaryContent.length > 0, "overflow produced secondary content");
+	assert.ok(
+		narrow.secondaryContent.length > 0,
+		"overflow produced secondary content",
+	);
 });
 
 test("computeResponsiveLayout returns empty when no segments are visible", () => {
@@ -142,7 +181,10 @@ test("computeResponsiveLayout includes custom items from customItems param", () 
 	// "passing" should appear somewhere in the output since hideWhenMissing=false
 	// and we provided the status value
 	const combined = layout.topContent + layout.secondaryContent;
-	assert.ok(combined.includes("passing"), "custom item value should appear in layout");
+	assert.ok(
+		combined.includes("passing"),
+		"custom item value should appear in layout",
+	);
 });
 
 test("computeResponsiveLayout does not use stale customItems when empty array passed", () => {
@@ -167,11 +209,19 @@ test("computeResponsiveLayout does not use stale customItems when empty array pa
 	const withoutItems = computeResponsiveLayout(ctx, tinyPreset, 200, []);
 
 	const combinedWith = withItems.topContent + withItems.secondaryContent;
-	const combinedWithout = withoutItems.topContent + withoutItems.secondaryContent;
+	const combinedWithout =
+		withoutItems.topContent + withoutItems.secondaryContent;
 
-	assert.ok(combinedWith.includes("passing"), "custom item visible when passed");
+	assert.ok(
+		combinedWith.includes("passing"),
+		"custom item visible when passed",
+	);
 	// Without custom items, the "passing" value from extension statuses might still show
 	// via the extension_statuses segment, but the custom:ci segment should NOT be there.
 	// We can verify by checking that the layout differs.
-	assert.notEqual(combinedWith, combinedWithout, "layout should differ with/without custom items");
+	assert.notEqual(
+		combinedWith,
+		combinedWithout,
+		"layout should differ with/without custom items",
+	);
 });
