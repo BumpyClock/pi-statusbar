@@ -12,7 +12,7 @@ import {
 	truncateToWidth as tuiTruncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
-import { ansi, fgOnly, getFgAnsiCode } from "../colors.ts";
+import { ansi, fgOnly, getFgAnsiCode } from "../theme/colors.ts";
 
 export interface RecentSession {
 	name: string;
