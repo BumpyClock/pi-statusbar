@@ -40,7 +40,7 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
-import { matchesConfiguredShortcut } from "../shortcuts.ts";
+import { matchesConfiguredShortcut } from "../core/shortcuts.ts";
 import type { FixedEditorClusterRender } from "./cluster.ts";
 import {
 	beginSynchronizedOutput,

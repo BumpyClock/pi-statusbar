@@ -1,5 +1,5 @@
-import type { StatusbarConfig } from "../statusbar-config.ts";
-import { PRESETS } from "../presets.ts";
+import type { StatusbarConfig } from "../statusbar/config.ts";
+import { PRESETS } from "../statusbar/presets.ts";
 import {
 	writeStatusbarPresetSetting,
 	writeStatusbarOptionSetting,
@@ -12,7 +12,15 @@ import {
 /** Minimal context shape needed by the /statusbar command. */
 export interface StatusbarCommandContext {
 	cwd: string;
-	ui: { notify: (message: string, level: string) => void };
+	hasUI?: boolean;
+	ui: {
+		notify: (message: string, level: string) => void;
+		setStatus: (key: string, value: unknown) => void;
+		setEditorComponent: (component: unknown) => void;
+		setFooter: (footer: unknown) => void;
+		setHeader: (header: unknown) => void;
+		setWidget: (id: string, widget: unknown) => void;
+	};
 }
 
 export interface StatusbarCommandDeps {
@@ -20,25 +28,22 @@ export interface StatusbarCommandDeps {
 	getConfig: () => StatusbarConfig;
 
 	/** Toggle enabled/disabled. Handles all state teardown/setup internally. */
-	toggleStatusbar: (ctx: any) => void;
+	toggleStatusbar: (ctx: StatusbarCommandContext) => void;
 
 	/** Apply a mouse-scroll config change and reinstall compositor if needed. */
-	applyMouseScroll: (value: boolean, ctx: any) => void;
+	applyMouseScroll: (value: boolean, ctx: StatusbarCommandContext) => void;
 
 	/** Apply a fixed-editor config change and reinstall editor if needed. */
-	applyFixedEditor: (value: boolean, ctx: any) => void;
+	applyFixedEditor: (value: boolean, ctx: StatusbarCommandContext) => void;
 
 	/** Apply a preset change, reset layout, and reinstall editor if needed. */
-	applyPreset: (preset: string, ctx: any) => void;
+	applyPreset: (preset: string, ctx: StatusbarCommandContext) => void;
 
 	/** Set currentCtx from the command context. */
-	setCurrentCtx: (ctx: any) => void;
+	setCurrentCtx: (ctx: StatusbarCommandContext) => void;
 }
 
-function isValidPreset(
-	value: string,
-	config: StatusbarConfig,
-): boolean {
+function isValidPreset(value: string, config: StatusbarConfig): boolean {
 	return Object.hasOwn(PRESETS, value) || Object.hasOwn(config.presets, value);
 }
 
@@ -76,7 +81,10 @@ function notifyOption(
  * Subcommands: (none = toggle), mouse-scroll, fixed-editor, <preset-name>.
  */
 export function createStatusbarCommandHandler(deps: StatusbarCommandDeps) {
-	return async (args: string | undefined, ctx: StatusbarCommandContext): Promise<void> => {
+	return async (
+		args: string | undefined,
+		ctx: StatusbarCommandContext,
+	): Promise<void> => {
 		deps.setCurrentCtx(ctx);
 
 		if (!args?.trim()) {
@@ -88,13 +96,12 @@ export function createStatusbarCommandHandler(deps: StatusbarCommandDeps) {
 		const normalizedArgs = args.trim().toLowerCase();
 
 		// /statusbar mouse-scroll [on|off|toggle]
-		const mouseScrollMatch = /^mouse-scroll(?:\s+(on|off|toggle))?$/.exec(
-			normalizedArgs,
+		const mouseScrollMatch = normalizedArgs.match(
+			/^mouse-scroll(?:\s+(on|off|toggle))?$/,
 		);
 		if (mouseScrollMatch) {
 			const mode = mouseScrollMatch[1] ?? "toggle";
-			const newValue =
-				mode === "toggle" ? !config.mouseScroll : mode === "on";
+			const newValue = mode === "toggle" ? !config.mouseScroll : mode === "on";
 			deps.applyMouseScroll(newValue, ctx);
 
 			const persisted = writeStatusbarOptionSetting(
@@ -111,13 +118,12 @@ export function createStatusbarCommandHandler(deps: StatusbarCommandDeps) {
 		}
 
 		// /statusbar fixed-editor [on|off|toggle]
-		const fixedEditorMatch = /^fixed-editor(?:\s+(on|off|toggle))?$/.exec(
-			normalizedArgs,
+		const fixedEditorMatch = normalizedArgs.match(
+			/^fixed-editor(?:\s+(on|off|toggle))?$/,
 		);
 		if (fixedEditorMatch) {
 			const mode = fixedEditorMatch[1] ?? "toggle";
-			const newValue =
-				mode === "toggle" ? !config.fixedEditor : mode === "on";
+			const newValue = mode === "toggle" ? !config.fixedEditor : mode === "on";
 			deps.applyFixedEditor(newValue, ctx);
 
 			const persisted = writeStatusbarOptionSetting(

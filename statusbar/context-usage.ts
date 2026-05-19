@@ -1,4 +1,4 @@
-import { isRecord } from "./core/stash-helpers.ts";
+import { isRecord } from "../core/stash-helpers.ts";
 
 interface CoreContextUsage {
   contextTokens: number;

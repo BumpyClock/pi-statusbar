@@ -9,7 +9,7 @@ import {
 	nextStatusbarSettingWithOptions,
 	nextStatusbarSettingWithPreset,
 	normalizeCompactExtensionStatus,
-} from "../statusbar-config.ts";
+} from "../statusbar/config.ts";
 
 test("parseStatusbarConfig supports object config with custom items", () => {
 	const config = parseStatusbarConfig(

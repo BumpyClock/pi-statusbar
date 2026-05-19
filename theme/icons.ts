@@ -1,4 +1,4 @@
-import { loadThemeConfig } from "./theme.ts";
+import { loadThemeConfig } from "./index.ts";
 
 export interface IconSet {
   pi: string;

@@ -1,6 +1,9 @@
 import { matchesKey } from "@earendil-works/pi-tui";
 import type { KeyId } from "@earendil-works/pi-tui";
 
+// Covers CSI modifier encodings (1;9 = Super, 1;10 = Super+Shift),
+// Kitty CSI-u numeric navigation codes (57419-57424), and xterm
+// modifyOtherKeys variants used by the Kitty/xterm shortcut tests.
 const SUPER_SHORTCUT_PATTERNS = new Map<string, RegExp>([
 	[
 		"super+up",
@@ -60,13 +63,23 @@ export function shortcutConflictKey(shortcut: string): string {
 }
 
 function normalizeKeyIdShortcut(shortcut: string): KeyId {
+	if (!shortcut.trim() || shortcut.endsWith("+")) {
+		throw new Error(`Invalid shortcut format: "${shortcut}"`);
+	}
+
 	const parts = shortcut.toLowerCase().split("+");
-	const key = parts.pop();
+	const key = parts.pop()?.trim();
+	if (!key) {
+		throw new Error(`Shortcut missing key component: "${shortcut}"`);
+	}
+
 	const canonicalKey =
 		key === "pageup" ? "pageUp" : key === "pagedown" ? "pageDown" : key;
-	return [...parts, canonicalKey]
-		.filter((part): part is string => Boolean(part))
-		.join("+") as KeyId;
+	const normalized = [...parts.filter(Boolean), canonicalKey].join("+");
+	if (!normalized) {
+		throw new Error(`Shortcut missing normalized key: "${shortcut}"`);
+	}
+	return normalized as KeyId;
 }
 
 export function matchesConfiguredShortcut(

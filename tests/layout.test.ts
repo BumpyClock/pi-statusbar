@@ -10,7 +10,7 @@ import type {
 	SegmentContext,
 	CustomStatusItem,
 } from "../types.ts";
-import { getDefaultColors } from "../theme.ts";
+import { getDefaultColors } from "../theme/index.ts";
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 

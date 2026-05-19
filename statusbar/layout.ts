@@ -6,10 +6,10 @@ import type {
 	SegmentContext,
 	StatusLineSegmentId,
 } from "../types.ts";
-import { mergeSegmentsWithCustomItems } from "../statusbar-config.ts";
-import { getSeparator } from "../separators.ts";
-import { renderSegment } from "../segments.ts";
-import { ansi, getFgAnsiCode } from "../colors.ts";
+import { mergeSegmentsWithCustomItems } from "./config.ts";
+import { getSeparator } from "../theme/separators.ts";
+import { renderSegment } from "./segments.ts";
+import { ansi, getFgAnsiCode } from "../theme/colors.ts";
 
 /** Render a single segment and return its content with width */
 export function renderSegmentWithWidth(

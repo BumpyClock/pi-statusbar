@@ -21,7 +21,7 @@ import type {
 	SegmentContext,
 	StatusLinePreset,
 } from "./types.ts";
-import type { StatusbarConfig } from "./statusbar-config.ts";
+import type { StatusbarConfig } from "./statusbar/config.ts";
 import { BashTranscriptStore } from "./bash-mode/transcript.ts";
 import {
 	BashCompletionEngine,
@@ -38,19 +38,19 @@ import {
 	readProjectHistory,
 	appendProjectHistory,
 } from "./bash-mode/history.ts";
-import { PRESETS } from "./presets.ts";
+import { PRESETS } from "./statusbar/presets.ts";
 import {
 	collectHiddenExtensionStatusKeys,
 	getNotificationExtensionStatuses,
 	parseStatusbarConfig,
 	resolvePresetDef,
-} from "./statusbar-config.ts";
+} from "./statusbar/config.ts";
 import {
 	getGitStatus,
 	invalidateGitStatus,
 	invalidateGitBranch,
-} from "./git-status.ts";
-import { ansi, getFgAnsiCode } from "./colors.ts";
+} from "./statusbar/git-status.ts";
+import { ansi, getFgAnsiCode } from "./theme/colors.ts";
 import { computeResponsiveLayout } from "./statusbar/layout.ts";
 import {
 	WelcomeComponent,
@@ -59,15 +59,15 @@ import {
 	getRecentSessions,
 } from "./welcome/component.ts";
 import { createWelcomeDismissScheduler } from "./welcome/dismiss.ts";
-import { createRenderScheduler } from "./render-scheduler.ts";
-import { readCoreContextUsage } from "./context-usage.ts";
+import { createRenderScheduler } from "./statusbar/render-scheduler.ts";
+import { readCoreContextUsage } from "./statusbar/context-usage.ts";
 import { renderFixedEditorCluster } from "./fixed-editor/cluster.ts";
 import {
 	emergencyTerminalModeReset,
 	TerminalSplitCompositor,
 } from "./fixed-editor/terminal-split.ts";
-import { getDefaultColors } from "./theme.ts";
-import { matchesConfiguredShortcut } from "./shortcuts.ts";
+import { getDefaultColors } from "./theme/index.ts";
+import { matchesConfiguredShortcut } from "./core/shortcuts.ts";
 import {
 	readSettings,
 	writeStatusbarSetting,

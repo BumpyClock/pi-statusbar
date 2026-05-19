@@ -6,7 +6,7 @@ import {
 	stripAnsiForVibeTest,
 	createVibeAnimationController,
 	SHIMMER_DEFAULTS,
-} from "../vibe-animation.ts";
+} from "../vibes/animation.ts";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // buildShimmer

@@ -1,4 +1,10 @@
-import { readdirSync, existsSync, statSync, readFileSync } from "node:fs";
+import {
+	readdirSync,
+	existsSync,
+	statSync,
+	lstatSync,
+	readFileSync,
+} from "node:fs";
 import { join, basename } from "node:path";
 import { homedir as osHomedir } from "node:os";
 import type { Component } from "@earendil-works/pi-tui";
@@ -363,18 +369,7 @@ function logDiscoveryError(scope: string, error: unknown): void {
 	console.debug(`[statusbar-welcome] ${scope}:`, error);
 }
 
-/**
- * Discover loaded counts by scanning filesystem.
- */
-export function discoverLoadedCounts(): LoadedCounts {
-	const homeDir = process.env.HOME || process.env.USERPROFILE || osHomedir();
-	const cwd = process.cwd();
-
-	let contextFiles = 0;
-	let extensions = 0;
-	let skills = 0;
-	let promptTemplates = 0;
-
+function countContextFiles(homeDir: string, cwd: string): number {
 	const agentsMdPaths = [
 		join(homeDir, ".pi", "agent", "AGENTS.md"),
 		join(homeDir, ".claude", "AGENTS.md"),
@@ -383,17 +378,19 @@ export function discoverLoadedCounts(): LoadedCounts {
 		join(cwd, ".claude", "AGENTS.md"),
 	];
 
+	let count = 0;
 	for (const path of agentsMdPaths) {
-		if (existsSync(path)) contextFiles++;
+		if (existsSync(path)) count++;
 	}
+	return count;
+}
 
-	const extensionDirs = [
-		join(homeDir, ".pi", "agent", "extensions"),
-		join(cwd, "extensions"),
-		join(cwd, ".pi", "extensions"),
-	];
-
-	const countedExtensions = new Set<string>();
+function discoverExtensions(
+	homeDir: string,
+	cwd: string,
+	counted: Set<string>,
+): number {
+	let extensions = 0;
 
 	const settingsPaths = [
 		join(homeDir, ".pi", "agent", "settings.json"),
@@ -451,11 +448,11 @@ export function discoverLoadedCounts(): LoadedCounts {
 					const body = normalizedSource.slice(4);
 					const versionIndex = body.lastIndexOf("@");
 					const name = versionIndex > 0 ? body.slice(0, versionIndex) : body;
-					if (!name || countedExtensions.has(name)) {
+					if (!name || counted.has(name)) {
 						continue;
 					}
 
-					countedExtensions.add(name);
+					counted.add(name);
 					extensions++;
 				}
 			}
@@ -463,6 +460,12 @@ export function discoverLoadedCounts(): LoadedCounts {
 			logDiscoveryError(`Failed to read settings at ${settingsPath}`, error);
 		}
 	}
+
+	const extensionDirs = [
+		join(homeDir, ".pi", "agent", "extensions"),
+		join(cwd, "extensions"),
+		join(cwd, ".pi", "extensions"),
+	];
 
 	for (const dir of extensionDirs) {
 		if (existsSync(dir)) {
@@ -480,8 +483,8 @@ export function discoverLoadedCounts(): LoadedCounts {
 								existsSync(join(entryPath, "index.js")) ||
 								existsSync(join(entryPath, "package.json"))
 							) {
-								if (!countedExtensions.has(entry)) {
-									countedExtensions.add(entry);
+								if (!counted.has(entry)) {
+									counted.add(entry);
 									extensions++;
 								}
 							}
@@ -491,8 +494,8 @@ export function discoverLoadedCounts(): LoadedCounts {
 						) {
 							const ext = entry.endsWith(".ts") ? ".ts" : ".js";
 							const name = basename(entry, ext);
-							if (!countedExtensions.has(name)) {
-								countedExtensions.add(name);
+							if (!counted.has(name)) {
+								counted.add(name);
 								extensions++;
 							}
 						}
@@ -509,13 +512,21 @@ export function discoverLoadedCounts(): LoadedCounts {
 		}
 	}
 
+	return extensions;
+}
+
+function discoverSkills(
+	homeDir: string,
+	cwd: string,
+	counted: Set<string>,
+): number {
+	let skills = 0;
+
 	const skillDirs = [
 		join(homeDir, ".pi", "agent", "skills"),
 		join(cwd, ".pi", "skills"),
 		join(cwd, "skills"),
 	];
-
-	const countedSkills = new Set<string>();
 
 	for (const dir of skillDirs) {
 		if (existsSync(dir)) {
@@ -526,8 +537,8 @@ export function discoverLoadedCounts(): LoadedCounts {
 					try {
 						if (statSync(entryPath).isDirectory()) {
 							if (existsSync(join(entryPath, "SKILL.md"))) {
-								if (!countedSkills.has(entry)) {
-									countedSkills.add(entry);
+								if (!counted.has(entry)) {
+									counted.add(entry);
 									skills++;
 								}
 							}
@@ -545,6 +556,18 @@ export function discoverLoadedCounts(): LoadedCounts {
 		}
 	}
 
+	return skills;
+}
+
+const maxTemplateScanDepth = 10;
+
+function discoverPromptTemplates(
+	homeDir: string,
+	cwd: string,
+	counted: Set<string>,
+): number {
+	let promptTemplates = 0;
+
 	const templateDirs = [
 		join(homeDir, ".pi", "agent", "commands"),
 		join(homeDir, ".claude", "commands"),
@@ -552,22 +575,22 @@ export function discoverLoadedCounts(): LoadedCounts {
 		join(cwd, ".claude", "commands"),
 	];
 
-	const countedTemplates = new Set<string>();
-
-	function countTemplatesInDir(dir: string) {
+	function countTemplatesInDir(dir: string, currentDepth = 0) {
+		if (currentDepth >= maxTemplateScanDepth) return;
 		if (!existsSync(dir)) return;
 		try {
 			const entries = readdirSync(dir);
 			for (const entry of entries) {
 				const entryPath = join(dir, entry);
 				try {
-					const stats = statSync(entryPath);
+					const stats = lstatSync(entryPath);
+					if (stats.isSymbolicLink()) continue;
 					if (stats.isDirectory()) {
-						countTemplatesInDir(entryPath);
+						countTemplatesInDir(entryPath, currentDepth + 1);
 					} else if (entry.endsWith(".md")) {
 						const name = basename(entry, ".md");
-						if (!countedTemplates.has(name)) {
-							countedTemplates.add(name);
+						if (!counted.has(name)) {
+							counted.add(name);
 							promptTemplates++;
 						}
 					}
@@ -586,6 +609,28 @@ export function discoverLoadedCounts(): LoadedCounts {
 	for (const dir of templateDirs) {
 		countTemplatesInDir(dir);
 	}
+
+	return promptTemplates;
+}
+
+/**
+ * Discover loaded counts by scanning filesystem.
+ */
+export function discoverLoadedCounts(): LoadedCounts {
+	const homeDir = process.env.HOME || process.env.USERPROFILE || osHomedir();
+	const cwd = process.cwd();
+
+	const contextFiles = countContextFiles(homeDir, cwd);
+	const countedExtensions = new Set<string>();
+	const extensions = discoverExtensions(homeDir, cwd, countedExtensions);
+	const countedSkills = new Set<string>();
+	const skills = discoverSkills(homeDir, cwd, countedSkills);
+	const countedTemplates = new Set<string>();
+	const promptTemplates = discoverPromptTemplates(
+		homeDir,
+		cwd,
+		countedTemplates,
+	);
 
 	return { contextFiles, extensions, skills, promptTemplates };
 }

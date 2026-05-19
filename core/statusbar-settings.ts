@@ -19,8 +19,8 @@ import { mergeSettings } from "./settings-merge.ts";
 import {
 	nextStatusbarSettingWithPreset,
 	nextStatusbarSettingWithOptions,
-} from "../statusbar-config.ts";
-import type { StatusbarConfig } from "../statusbar-config.ts";
+} from "../statusbar/config.ts";
+import type { StatusbarConfig } from "../statusbar/config.ts";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Helpers

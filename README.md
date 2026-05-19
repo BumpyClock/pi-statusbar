@@ -46,31 +46,25 @@ Restart pi to activate.
 
 **Entry point:** `index.ts` is the stable Pi runtime entry, wired via `package.json → pi.extensions → "./index.ts"`. It bootstraps the extension and should not be split or renamed.
 
+**Root files** are intentionally minimal:
+
+- `index.ts` — stable Pi runtime entry, wired via `package.json → pi.extensions → "./index.ts"`.
+- `types.ts` — shared type contracts used across implementation modules and tests.
+
 **Domain folders** contain the actual implementation:
 
-| Folder          | Purpose                                                              |
-| --------------- | -------------------------------------------------------------------- |
-| `core/`         | Settings merge, shortcut config, stash helpers, prompt/stash history |
-| `statusbar/`    | Layout engine (responsive row computation)                           |
-| `commands/`     | Slash-command handlers (`/statusbar`, `/vibe`, `/bash-mode`)         |
-| `vibes/`        | Vibe config, packs, picker, animation, manager                       |
-| `welcome/`      | Welcome overlay component and dismiss scheduler                      |
-| `bash-mode/`    | Shell session, completion, history, transcript, editor               |
-| `fixed-editor/` | Terminal compositor, mouse handling, cluster rendering               |
+| Folder          | Purpose                                                                           |
+| --------------- | --------------------------------------------------------------------------------- |
+| `core/`         | Settings merge, shortcuts, stash helpers, prompt/stash history                    |
+| `statusbar/`    | Config parsing, presets, segments, layout, render scheduling, git/context helpers |
+| `theme/`        | Theme config, semantic colors, ANSI helpers, icons, separators                    |
+| `commands/`     | Slash-command handlers (`/statusbar`, `/vibe`, `/bash-mode`)                      |
+| `vibes/`        | Vibe config, packs, picker, animation, manager                                    |
+| `welcome/`      | Welcome overlay component and dismiss scheduler                                   |
+| `bash-mode/`    | Shell session, completion, history, transcript, editor                            |
+| `fixed-editor/` | Terminal compositor, mouse handling, cluster rendering                            |
 
-**Root `.ts` files** are public-ish compatibility shims and shared modules (types, colors, icons, presets, segments, theme, git-status, etc.). Several are re-export shims that delegate to a domain folder:
-
-```text
-vibe-animation.ts  → vibes/animation.ts
-vibe-config.ts     → vibes/config.ts
-vibe-packs.ts      → vibes/packs.ts
-vibe-picker.ts     → vibes/picker.ts
-working-vibes.ts   → vibes/manager.ts
-welcome.ts         → welcome/component.ts
-welcome-dismiss.ts → welcome/dismiss.ts
-```
-
-New internal implementation should live in the appropriate domain folder. Root modules should not grow; add new files inside `core/`, `statusbar/`, `commands/`, `vibes/`, or `welcome/` instead. The `package.json → files` glob includes all seven domain folders plus root `*.ts`.
+New internal implementation should live in the appropriate domain folder. Root TypeScript files should stay limited to `index.ts` and `types.ts`; package publishing lists those files explicitly plus each runtime domain folder.
 
 ## Usage
 

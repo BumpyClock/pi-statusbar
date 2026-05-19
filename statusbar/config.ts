@@ -1,7 +1,7 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { isRecord } from "./core/stash-helpers.ts";
-import { getDefaultColors } from "./theme.ts";
-import { parseVibeConfig, type VibeConfig } from "./vibes/config.ts";
+import { isRecord } from "../core/stash-helpers.ts";
+import { getDefaultColors } from "../theme/index.ts";
+import { parseVibeConfig, type VibeConfig } from "../vibes/config.ts";
 import type {
 	BuiltinStatusLineSegmentId,
 	ColorScheme,
@@ -15,7 +15,7 @@ import type {
 	StatusLineSegmentId,
 	StatusLineSegmentOptions,
 	UserPresetDef,
-} from "./types.ts";
+} from "../types.ts";
 
 export interface StatusbarConfig {
 	preset: string;
@@ -212,7 +212,8 @@ function normalizeSegmentOptions(
 			Number.isFinite(raw.path.maxLength) &&
 			raw.path.maxLength > 0
 		) {
-			pathOptions.maxLength = Math.floor(raw.path.maxLength);
+			const maxLength = Math.floor(raw.path.maxLength);
+			if (maxLength >= 1) pathOptions.maxLength = maxLength;
 		}
 		if (Object.keys(pathOptions).length > 0) result.path = pathOptions;
 	}

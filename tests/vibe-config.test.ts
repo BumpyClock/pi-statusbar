@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
 	parseVibeConfig,
 	DEFAULT_GENERATED_VIBE_PROMPT,
-} from "../vibe-config.ts";
+} from "../vibes/config.ts";
 
 // ── Defaults ──────────────────────────────────────────────────────────────
 

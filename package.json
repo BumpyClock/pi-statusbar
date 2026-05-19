@@ -4,10 +4,11 @@
   "description": "Status bar extension for pi coding agent",
   "type": "module",
   "engines": {
-    "node": ">=20.3.0"
+    "node": ">=22.6.0"
   },
   "files": [
-    "*.ts",
+    "index.ts",
+    "types.ts",
     "*.md",
     "*.json",
     "!progress.md",
@@ -16,6 +17,7 @@
     "core/**/*.ts",
     "fixed-editor/**/*.ts",
     "statusbar/**/*.ts",
+    "theme/**/*.ts",
     "vibes/**/*.ts",
     "welcome/**/*.ts"
   ],

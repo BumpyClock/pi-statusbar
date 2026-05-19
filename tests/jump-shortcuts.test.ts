@@ -6,7 +6,7 @@ import {
 	isSupportedSuperShortcut,
 	matchesConfiguredShortcut,
 	shortcutConflictKey,
-} from "../shortcuts.ts";
+} from "../core/shortcuts.ts";
 
 const source = readFileSync(new URL("../index.ts", import.meta.url), "utf-8");
 const configSource = readFileSync(new URL("../core/shortcut-config.ts", import.meta.url), "utf-8");

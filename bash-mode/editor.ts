@@ -6,7 +6,7 @@ import {
 	truncateToWidth,
 } from "@earendil-works/pi-tui";
 import type { AutocompleteProvider } from "@earendil-works/pi-tui";
-import { matchesConfiguredShortcut } from "../shortcuts.ts";
+import { matchesConfiguredShortcut } from "../core/shortcuts.ts";
 import { getOneOffBashCommandContext } from "./completion.ts";
 import type { GhostSuggestion } from "./types.ts";
 

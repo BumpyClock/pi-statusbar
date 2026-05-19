@@ -75,10 +75,8 @@ export function disableMouseReporting(): string {
 
 // --- Extended keyboard modes ---
 
-export function enableExtendedKeyboardMode(
-	mode: ExtendedKeyboardMode,
-): string {
-	return mode === "kitty" ? "\x1b[>7u" : "\x1b[>4;2m";
+export function enableExtendedKeyboardMode(mode: ExtendedKeyboardMode): string {
+	return mode === "kitty" ? "\x1b[>1u" : "\x1b[>4;2m";
 }
 
 export function disableExtendedKeyboardMode(

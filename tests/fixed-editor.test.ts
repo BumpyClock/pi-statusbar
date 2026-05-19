@@ -286,8 +286,8 @@ test("terminal split re-enables Kitty keyboard protocol in alternate screen", ()
 
 	const setup = terminal.writes[0] ?? "";
 	assert.ok(setup.includes("\x1b[?1049h"));
-	assert.ok(setup.includes("\x1b[>7u"));
-	assert.ok(setup.indexOf("\x1b[?1049h") < setup.indexOf("\x1b[>7u"));
+	assert.ok(setup.includes("\x1b[>1u"));
+	assert.ok(setup.indexOf("\x1b[?1049h") < setup.indexOf("\x1b[>1u"));
 
 	compositor.dispose();
 
@@ -335,9 +335,9 @@ test("terminal split restores main screen mode when Kitty activates after instal
 
 	const cleanup = terminal.writes.at(-1) ?? "";
 	assert.ok(cleanup.includes("\x1b[<u"));
-	assert.ok(cleanup.includes("\x1b[>7u"));
+	assert.ok(cleanup.includes("\x1b[>1u"));
 	assert.ok(cleanup.indexOf("\x1b[<u") < cleanup.indexOf("\x1b[?1049l"));
-	assert.ok(cleanup.indexOf("\x1b[?1049l") < cleanup.indexOf("\x1b[>7u"));
+	assert.ok(cleanup.indexOf("\x1b[?1049l") < cleanup.indexOf("\x1b[>1u"));
 });
 
 test("terminal split restores main screen mode when modifyOtherKeys activates after install", () => {

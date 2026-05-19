@@ -5,8 +5,8 @@ import {
 	isUnsafeMessage,
 	createVibePicker,
 	type PackFilterOptions,
-} from "../vibe-picker.ts";
-import type { VibePack, VibeMessage } from "../vibe-packs.ts";
+} from "../vibes/picker.ts";
+import type { VibePack, VibeMessage } from "../vibes/packs.ts";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
 

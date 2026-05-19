@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { renderSegment } from "../segments.ts";
+import { renderSegment } from "../statusbar/segments.ts";
 import type { ColorScheme, SegmentContext, ThemeLike } from "../types.ts";
 
 function hexAnsi(hex: `#${string}`): string {

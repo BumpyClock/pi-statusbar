@@ -9,7 +9,7 @@ import {
 	isSupportedSuperShortcut,
 	shortcutConflictKey,
 	shortcutUsesSuper,
-} from "../shortcuts.ts";
+} from "./shortcuts.ts";
 import type { BashModeSettings } from "../bash-mode/types.ts";
 import { isRecord } from "./stash-helpers.ts";
 
@@ -91,8 +91,8 @@ export function normalizeShortcut(value: string): string {
 export function isValidShortcutKeyPart(keyPart: string): boolean {
 	const lowerKeyPart = keyPart.toLowerCase();
 
-	if (/^[a-z0-9]$/i.test(keyPart)) return true;
-	if (/^f([1-9]|1[0-2])$/i.test(keyPart)) return true;
+	if (/^[a-z0-9]$/.test(lowerKeyPart)) return true;
+	if (/^f([1-9]|1[0-2])$/.test(lowerKeyPart)) return true;
 	if (SHORTCUT_NAMED_KEYS.has(lowerKeyPart)) return true;
 
 	return SHORTCUT_SYMBOL_KEYS.has(keyPart);
