@@ -362,13 +362,13 @@ function logDiscoveryError(scope: string, error: unknown): void {
 }
 
 function countContextFiles(homeDir: string, cwd: string): number {
-	const agentsMdPaths = [
+	const agentsMdPaths = new Set([
 		join(homeDir, ".pi", "agent", "AGENTS.md"),
 		join(homeDir, ".claude", "AGENTS.md"),
 		join(cwd, "AGENTS.md"),
 		join(cwd, ".pi", "AGENTS.md"),
 		join(cwd, ".claude", "AGENTS.md"),
-	];
+	]);
 
 	let count = 0;
 	for (const path of agentsMdPaths) {
@@ -631,6 +631,9 @@ export function discoverLoadedCounts(): LoadedCounts {
  * Get recent sessions from the sessions directory.
  */
 export function getRecentSessions(maxCount: number = 3): RecentSession[] {
+	const safeMaxCount = Number.isFinite(maxCount)
+		? Math.max(0, Math.floor(maxCount))
+		: 0;
 	const homeDir = process.env.HOME || process.env.USERPROFILE || osHomedir();
 
 	const sessionsDirs = [
@@ -692,7 +695,7 @@ export function getRecentSessions(maxCount: number = 3): RecentSession[] {
 	}
 
 	const now = Date.now();
-	return uniqueSessions.slice(0, maxCount).map((s) => ({
+	return uniqueSessions.slice(0, safeMaxCount).map((s) => ({
 		name: s.name.length > 20 ? s.name.slice(0, 17) + "…" : s.name,
 		timeAgo: formatTimeAgo(now - s.mtime),
 	}));

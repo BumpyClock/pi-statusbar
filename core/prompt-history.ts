@@ -79,9 +79,7 @@ export function snapshotPromptHistory(
 	limit = 100,
 ): void {
 	const history = readPromptHistory(editor, limit);
-	if (history.length > 0) {
-		getPromptHistoryState().savedPromptHistory = [...history];
-	}
+	getPromptHistoryState().savedPromptHistory = [...history];
 }
 
 export function restorePromptHistory(

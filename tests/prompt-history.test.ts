@@ -96,13 +96,10 @@ test("restorePromptHistory is no-op when editor has no addToHistory", () => {
 	restorePromptHistory(newEditor); // should not throw
 });
 
-test("snapshotPromptHistory does not overwrite with empty history", () => {
+test("snapshotPromptHistory clears stale saved state for empty history", () => {
 	clearGlobalState();
 
-	// First snapshot some real data
 	snapshotPromptHistory({ history: ["real"] });
-
-	// Then snapshot with empty editor — should not wipe saved state
 	snapshotPromptHistory({ history: [] });
 
 	const newEditor = {
@@ -113,7 +110,7 @@ test("snapshotPromptHistory does not overwrite with empty history", () => {
 	};
 
 	restorePromptHistory(newEditor);
-	assert.deepEqual(newEditor.history, ["real"]);
+	assert.deepEqual(newEditor.history, []);
 });
 
 // ── trackPromptHistory ──────────────────────────────────────────────────

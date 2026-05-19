@@ -77,11 +77,7 @@ export function readRecentProjectPrompts(cwd: string, limit: number): string[] {
 
 		for (let i = lines.length - 1; i >= 0; i--) {
 			const line = lines[i];
-			if (
-				!line ||
-				!line.includes('"type":"message"') ||
-				!line.includes('"role":"user"')
-			) {
+			if (!line?.trim()) {
 				continue;
 			}
 
