@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+	PROMPT_HISTORY_STATE_KEY,
 	readPromptHistory,
 	snapshotPromptHistory,
 	restorePromptHistory,
@@ -8,10 +9,8 @@ import {
 	clearSavedPromptHistory,
 } from "../core/prompt-history.ts";
 
-const STATE_KEY = Symbol.for("@bumpyclock/pi-statusbar/promptHistoryState");
-
 function clearGlobalState() {
-	Reflect.deleteProperty(globalThis, STATE_KEY);
+	Reflect.deleteProperty(globalThis, PROMPT_HISTORY_STATE_KEY);
 }
 
 // ── readPromptHistory ────────────────────────────────────────────────────
@@ -130,7 +129,7 @@ test("trackPromptHistory patches addToHistory to auto-snapshot", () => {
 	// Adding new entry should trigger snapshot
 	editor.addToHistory("new-entry");
 
-	const state = Reflect.get(globalThis, STATE_KEY) as any;
+	const state = Reflect.get(globalThis, PROMPT_HISTORY_STATE_KEY) as any;
 	assert.ok(state);
 	assert.ok(state.savedPromptHistory.includes("new-entry"));
 });
@@ -162,7 +161,7 @@ test("trackPromptHistory re-snapshots if already tracked", () => {
 	editor.history.unshift("second");
 	trackPromptHistory(editor); // should re-snapshot
 
-	const state = Reflect.get(globalThis, STATE_KEY) as any;
+	const state = Reflect.get(globalThis, PROMPT_HISTORY_STATE_KEY) as any;
 	assert.ok(state.savedPromptHistory.includes("second"));
 });
 

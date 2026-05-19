@@ -8,7 +8,7 @@ import { isRecord } from "./stash-helpers.ts";
 const PROMPT_HISTORY_TRACKED = Symbol.for(
 	"@bumpyclock/pi-statusbar/promptHistoryTracked",
 );
-const PROMPT_HISTORY_STATE_KEY = Symbol.for(
+export const PROMPT_HISTORY_STATE_KEY = Symbol.for(
 	"@bumpyclock/pi-statusbar/promptHistoryState",
 );
 
