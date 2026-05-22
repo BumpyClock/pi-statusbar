@@ -1,75 +1,47 @@
 # Code Context
 
 ## Files Retrieved
-1. `bash-mode/completion.ts` (lines 418-505 and 499-505) — `AutocompleteProvider` implementation methods currently typed as synchronous/union-return and failing interface conformance diagnostics.
-2. `shortcuts.ts` (lines 40-47) — `matchesConfiguredShortcut` runtime path to `matchesKey` with raw `string` arg triggering `KeyId` mismatch.
-3. `node_modules/@earendil-works/pi-tui/dist/autocomplete.d.ts` (lines 17-21, 34-37) — source of `AutocompleteProvider.getSuggestions` contract (`Promise<AutocompleteSuggestions | null>`).
-4. `node_modules/@earendil-works/pi-tui/dist/keys.d.ts` (lines 31-33, 42, 165) — `KeyId` includes `pageUp`/`pageDown` (camelCase), not `pageup`/`pagedown`.
-5. `index.ts` (lines 1905-1911, 1915-1945, 3160-3167) — call sites for `matchesConfiguredShortcut` and where bash autocomplete providers are wrapped/installed.
-6. `tests/bash-mode.test.ts` (lines 736-772) — explicit sync return assumptions for `getSuggestions` (`instanceof Promise` checks).
+1. `index.ts` (lines 327-378, 1379-1422, 1480-1496, 1900-2148, 2156+): core statusbar runtime; extension status hook lifecycle, segment context assembly, and widget rendering path.
+2. `statusbar/config.ts` (lines 363-401, 551-598, 493-520): statusbar config parsing, custom item normalization, hidden key derivation, and extension status helpers.
+3. `statusbar/segments.ts` (lines 448-474, 502-529): built-in `extension_statuses` segment plus `custom:<id>` segment rendering from `extensionStatuses` map.
+4. `statusbar/layout.ts` (lines 53-123): merges preset segments with `customItems` and renders top/secondary bar rows.
+5. `types.ts` (lines 95-105, 184-188): `CustomStatusItem` and `SegmentContext` fields that carry extension status map/metadata through render.
+6. `README.md` (lines 169-207): documented integration contract for extension statuses + `statusbar.customItems` and hide/exclude behavior.
+7. `tests/custom-items.test.ts` (full): existing assertions for custom status item config + hidden key + status normalization helpers.
+8. `tests/layout.test.ts` (lines 161-219): current behavior checks for custom items rendering from extension-status map in layout.
+9. `C:/Users/adityasharma/Projects/dotfiles/.pi/agent/extensions/personality-switcher/index.ts` (lines 10-38): extension wiring + startup hook where status is updated.
+10. `C:/Users/adityasharma/Projects/dotfiles/.pi/agent/extensions/personality-switcher/commands.ts` (lines 17-25, 27-39): `updateStatus` currently clears key; persistence flow that should propagate UI status.
+11. `C:/Users/adityasharma/Projects/dotfiles/.pi/agent/extensions/personality-switcher/state.ts` (lines 103-125, 128-153): extension state read/write lives in `~/.pi/agent/settings.json` under `extensionSettings.personalitySwitcher`.
+12. `C:/Users/adityasharma/Projects/dotfiles/.pi/agent/extensions/personality-switcher/node-builtins.ts` (lines 54-61): shared config path with statusbar (`settings.json`).
+13. `C:/Users/adityasharma/Projects/dotfiles/.pi/agent/settings.json` (lines 67-90, 103-109): current real user config: statusbar preset/customItems and personality extension settings persist together.
 
 ## Key Code
-
-**Diagnostics captured (TypeScript LSP-equivalent run with `npx tsc --pretty false --noEmit --types node --allowImportingTsExtensions bash-mode/completion.ts shortcuts.ts`):**
-- `bash-mode/completion.ts:419` `BashAutocompleteProvider.getSuggestions(): AutocompleteSuggestions | null`
-- `bash-mode/completion.ts:459` `OneOffBashAutocompleteProvider.getSuggestions(): AutocompleteSuggestions | null`
-- `bash-mode/completion.ts:499` `ModeAwareAutocompleteProvider.getSuggestions(...): AutocompleteSuggestions | null | Promise<...>`
-- `shortcuts.ts:46` `matchesConfiguredShortcut(...){... return matchesKey(data, shortcut); }`
-
-**Contract mismatch source** (`pi-tui`):
-```ts
-export interface AutocompleteProvider {
-  getSuggestions(
-    lines: string[], cursorLine: number, cursorCol: number,
-    options: { signal: AbortSignal; force?: boolean }
-  ): Promise<AutocompleteSuggestions | null>;
-}
-```
-
-**Current provider signatures**:
-- `BashAutocompleteProvider.getSuggestions()` — no args, sync return.
-- `OneOffBashAutocompleteProvider.getSuggestions()` — no args, sync return.
-- `ModeAwareAutocompleteProvider.getSuggestions(...)` — mixed return including raw sync path.
-
-**Shortcut matching**:
-```ts
-const normalizedShortcut = shortcut.toLowerCase();
-if (shortcutUsesSuper(normalizedShortcut)) { ... }
-return matchesKey(data, shortcut);
-```
-- Type error: `shortcut` is `string`, but `matchesKey` requires `KeyId`.
-
-**`KeyId` constraint relevant detail:**
-- Accepts `pageUp`/`pageDown`, while shortcut normalization layer currently uses lowercase `pageup`/`pagedown`.
+- **Statusbar consumes extension statuses via footer hook:** in `setupFooter` callback, `setExtensionStatus` is monkey-patched to `requestImmediateStatusRender()` after every update, so statusbar re-renders on `setStatus` calls (`index.ts:327-378`).
+- **Segment context pulls status map each render:** `buildSegmentContext` reads `footerDataRef.getExtensionStatuses()` and injects `extensionStatuses`, `customItemsById`, and hidden-key set into context (`index.ts:1380-1422`).
+- **Extension status rendering path:** default `extension_statuses` segment joins visible non-notification statuses from map unless key is hidden; custom segment resolves `custom:<id>` from `customItemsById` and `statusKey` (`segments.ts:448-474`, `segments.ts:502-529`).
+- **Config controls promotion of keys:** `collectHiddenExtensionStatusKeys` defaults `excludeFromExtensionStatuses` to `true`, so custom items remove that key from aggregate segment unless opted out (`statusbar/config.ts:551-559`).
+- **Personality extension currently suppresses status:** `updateStatus` always calls `ctx.ui.setStatus("personality", undefined)` on session start and after persistence, meaning no visible payload is ever published (`commands.ts:19-25`, `persistState` flow calls `updateStatus`).
+- **Personality state persistence shares same file as statusbar config:** writes `extensionSettings.personalitySwitcher` under `~/.pi/agent/settings.json` (`state.ts:127-153`, `node-builtins.ts:54-61`), while statusbar reads `statusbar` from merged global/project settings (`settings file in dotfiles`).
 
 ## Architecture
-- `matchesConfiguredShortcut` is the shared router for runtime shortcut dispatch in `index.ts` (chat jump, stash, copy/cut, bash-mode toggle), so any normalization/type-guard change here changes all shortcut matching behavior.
-- Bash providers are installed in `index.ts:3160-3168` via `ModeAwareAutocompleteProvider` wrapper around `defaultProvider` + bash-specific providers.
-- Interface contract must stay compatible with `AutocompleteProvider`; current classes are used where async suggestions are expected.
-
-## Minimal safe fixes
-1. **`bash-mode/completion.ts`**
-   - `BashAutocompleteProvider.getSuggestions`:
-     - Add full params: `(lines, cursorLine, cursorCol, options)`.
-     - Return `Promise<AutocompleteSuggestions | null>` (likely `return Promise.resolve(null)` unless real suggestion logic exists).
-   - `OneOffBashAutocompleteProvider.getSuggestions`:
-     - Same change as above.
-   - `ModeAwareAutocompleteProvider.getSuggestions`:
-     - Change return to `Promise<AutocompleteSuggestions | null>` and align body with awaited provider calls.
-     - Keep fallback for missing `defaultProvider` returning `null` (as resolved promise in async context).
-
-2. **`shortcuts.ts`**
-   - Normalize non-`super` shortcut before `matchesKey` into `KeyId`-compatible string:
-     - map `pageup -> pageUp`, `pagedown -> pageDown` at minimum.
-     - narrow to `KeyId` only after mapping (or explicit local helper/type-guard).
-   - Keep super regex path unchanged.
-
-## Test impact
-- `tests/bash-mode.test.ts`:
-  - `"bash autocomplete providers return null synchronously in shell contexts"` currently asserts no Promise (`lines 736-746`).
-  - `"mode-aware autocomplete provider preserves synchronous default results"` currently asserts returned object is not Promise (`lines 748-772`).
-  - Both need update if `getSuggestions` becomes Promise-based.
-- Existing shortcut tests in `tests/jump-shortcuts.test.ts` only exercise `super+...` flows, so non-super canonicalization change likely requires **new coverage** for `pageup/pagedown` behavior, not replacement of existing coverage.
+- `personality-switcher` extension owns user-visible runtime state (personality/style) and writes it to settings; on session start it loads and normalizes that state, then currently only clears a `personality` UI status key.
+- `pi-statusbar` is already designed to ingest arbitrary extension status keys through `ctx.ui.setStatus(...)`; it needs that key/value plus optional `statusbar.customItems` config to expose it.
+- `configbar` pipeline is explicit and composable: `statusbar.customItems` maps status keys to layout segments; segment rendering is deterministic and tested for dedupe/merging/notifications.
+- The integration seam is therefore not API-level missing plumbing, but a **contract mismatch**: personality extension emits `undefined` while statusbar expects meaningful text values.
+- `dotfiles/.pi/agent/settings.json` already has both personality state (`extensionSettings`) and statusbar customization in one file, so adding a custom item is low-friction.
 
 ## Start Here
-Open `bash-mode/completion.ts` around class methods `getSuggestions` (`~lines 419, 459, 499`) first to align signatures with `AutocompleteProvider`, then open `shortcuts.ts` around `matchesConfiguredShortcut` (`~line 40`) for `KeyId`-safe normalization.
+`index.ts` in `pi-statusbar` — this is the single flow where extension status updates become UI output (`setExtensionStatus` patch → status map → segment context → layout/segments). After validating this, inspect `statusbar/config.ts` + `segments.ts` for exact config and rendering semantics.
+
+## Tests to add
+1. **pi-statusbar unit tests** (`tests/layout.test.ts`): add case proving a custom item item with `statusKey: "personality"` and map value renders in status bar text; include width-sensitive fallback (visible once status text absent/present).
+2. **pi-statusbar unit tests** (`tests/custom-items.test.ts`): add assertion that custom item with `excludeFromExtensionStatuses: true` removes `personality` from `extension_statuses` aggregate, matching current key-move behavior.
+3. **Personality extension regression (if test harness added to dotfiles)**: assert `updateStatus({personality:"caveman",styles:[...]})` calls `setStatus("personality", value)` and `setStatus(..., undefined)` when off.
+4. **Manual integration check (dotfiles settings):** with `personalitySwitcher` set and added `statusbar.customItems` entry, start session and confirm prompt shows status bar chip updates on `/personality` changes.
+
+## Risks
+- **Config collision/risk of invisibility:** current dotfiles preset (`statusbar.preset: default-no-cost`) may not include segment placement for personality unless custom item is added/placed.
+- **Text churn / overflow:** personality strings can be verbose (e.g., `caveman + explanatory + gordon-ramsay`) and may spill layout, especially on narrow terminals.
+- **Key namespace collision:** hard-coded key `personality` is shared only if other extensions choose same key; low risk but avoid overlap.
+- **Stale state during early startup:** if statusbar is disabled/uninitialized, status updates still get published but no visible consumer exists until statusbar footer/widgets are mounted.
+- **Styling/notification semantics:** default `excludeFromExtensionStatuses:true` hides the value from aggregated `extension_statuses`; good for clean UI, but if desired, set false to also show in aggregate notification area.
