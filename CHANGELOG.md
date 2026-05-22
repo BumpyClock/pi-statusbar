@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.3](https://github.com/BumpyClock/pi-statusbar/compare/v0.1.2...v0.1.3) (2026-05-22)
+
+
+### Bug Fixes
+
+* address automated architecture review ([faef504](https://github.com/BumpyClock/pi-statusbar/commit/faef504f9e84cf63154bea3225f49b99c9943b4f))
+* harden review edge cases ([3777690](https://github.com/BumpyClock/pi-statusbar/commit/37776902f36c6aeb688f53302ec7f9a2564b84dc))
+* keep reorg imports and docs scoped ([382f0dd](https://github.com/BumpyClock/pi-statusbar/commit/382f0ddd55becf593bd810024ad8e59d1d918f36))
+* normalize non-finite history limits ([ce205bb](https://github.com/BumpyClock/pi-statusbar/commit/ce205bb27da8eebb90d752399487b5ccc5e1a0bf))
+* refresh tracked prompt history limit ([dea846b](https://github.com/BumpyClock/pi-statusbar/commit/dea846b1bf6487d7710ba99d2ac8e0623dd307d1))
+
 ## [Unreleased]
 
 ### Added

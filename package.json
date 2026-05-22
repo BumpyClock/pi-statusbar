@@ -1,6 +1,6 @@
 {
   "name": "@bumpyclock/pi-statusbar",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Status bar extension for pi coding agent",
   "type": "module",
   "engines": {
