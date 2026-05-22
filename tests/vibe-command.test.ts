@@ -6,8 +6,8 @@ import {
 	nextVibeSetting,
 	DEFAULT_GENERATED_VIBE_PROMPT,
 	type VibeConfig,
-} from "../vibe-config.ts";
-import { getBuiltinVibePackIds, BUILTIN_VIBE_PACKS } from "../vibe-packs.ts";
+} from "../vibes/config.ts";
+import { getBuiltinVibePackIds, BUILTIN_VIBE_PACKS } from "../vibes/packs.ts";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // nextVibeSetting – mirrors the command update patterns in index.ts

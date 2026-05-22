@@ -25,7 +25,7 @@ import {
 	ModeAwareAutocompleteProvider,
 	OneOffBashAutocompleteProvider,
 } from "../bash-mode/completion.ts";
-import { getIcons } from "../icons.ts";
+import { getIcons } from "../theme/icons.ts";
 import { ManagedShellSession } from "../bash-mode/shell-session.ts";
 
 function getMethod(target: object, name: string): Function {

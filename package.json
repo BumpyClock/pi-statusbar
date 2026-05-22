@@ -3,13 +3,23 @@
   "version": "0.1.2",
   "description": "Status bar extension for pi coding agent",
   "type": "module",
+  "engines": {
+    "node": ">=22.6.0"
+  },
   "files": [
-    "*.ts",
+    "index.ts",
+    "types.ts",
     "*.md",
     "*.json",
     "!progress.md",
     "bash-mode/**/*.ts",
-    "fixed-editor/**/*.ts"
+    "commands/**/*.ts",
+    "core/**/*.ts",
+    "fixed-editor/**/*.ts",
+    "statusbar/**/*.ts",
+    "theme/**/*.ts",
+    "vibes/**/*.ts",
+    "welcome/**/*.ts"
   ],
   "keywords": [
     "pi-package",

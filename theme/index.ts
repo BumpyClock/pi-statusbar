@@ -11,12 +11,13 @@ import type { ThemeColor } from "@earendil-works/pi-coding-agent";
 import { existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isRecord } from "../core/stash-helpers.ts";
 import type {
 	ColorScheme,
 	ColorValue,
 	SemanticColor,
 	ThemeLike,
-} from "./types.ts";
+} from "../types.ts";
 
 export interface StatusbarThemeConfig {
 	colors?: unknown;
@@ -52,7 +53,6 @@ const RAINBOW_COLORS = [
 	"#89d281",
 	"#00afaf",
 	"#178fb9",
-	"#b281d6",
 ];
 
 // Cache for user theme overrides
@@ -63,10 +63,6 @@ let themeConfigCacheTime = 0;
 const CACHE_TTL = 5000; // 5 seconds
 const warnedInvalidThemeColors = new Set<string>();
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function sanitizeUserThemeOverrides(value: unknown): ColorScheme {
 	if (!isRecord(value)) {
 		return {};
@@ -74,7 +70,7 @@ function sanitizeUserThemeOverrides(value: unknown): ColorScheme {
 
 	const sanitized: ColorScheme = {};
 	for (const [key, rawColor] of Object.entries(value)) {
-		if (!Object.prototype.hasOwnProperty.call(DEFAULT_COLORS, key)) {
+		if (!Object.hasOwn(DEFAULT_COLORS, key)) {
 			continue;
 		}
 		if (typeof rawColor !== "string") {
@@ -97,7 +93,7 @@ function sanitizeUserThemeOverrides(value: unknown): ColorScheme {
  */
 function getThemePath(): string {
 	const extDir = dirname(fileURLToPath(import.meta.url));
-	return join(extDir, "theme.json");
+	return join(extDir, "..", "theme.json");
 }
 
 /**
@@ -190,9 +186,8 @@ export function applyColor(
 	} catch (error) {
 		const key = String(color);
 		if (!warnedInvalidThemeColors.has(key)) {
-			warnedInvalidThemeColors.add(key);
-			if (warnedInvalidThemeColors.size > 200) {
-				warnedInvalidThemeColors.clear();
+			if (warnedInvalidThemeColors.size < 200) {
+				warnedInvalidThemeColors.add(key);
 			}
 			console.debug(
 				`[statusbar-theme] Invalid theme color "${key}"; falling back to "text".`,

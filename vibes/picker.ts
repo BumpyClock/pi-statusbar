@@ -8,7 +8,7 @@
  * calls avoid immediate repeats when ≥2 candidates exist.
  */
 
-import { UNSAFE_RE, type VibePack, type VibeMessage } from "./vibe-packs.ts";
+import { UNSAFE_RE, type VibePack, type VibeMessage } from "./packs.ts";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 

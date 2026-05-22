@@ -11,17 +11,17 @@
 
 import { complete, type Context } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { VibeConfig } from "./vibe-config.ts";
-import { BUILTIN_VIBE_PACKS } from "./vibe-packs.ts";
+import type { VibeConfig } from "./config.ts";
+import { BUILTIN_VIBE_PACKS } from "./packs.ts";
 import {
 	createVibePicker,
 	getAllowedPackMessages,
 	type VibePicker,
-} from "./vibe-picker.ts";
+} from "./picker.ts";
 import {
 	createVibeAnimationController,
 	type VibeAnimationController,
-} from "./vibe-animation.ts";
+} from "./animation.ts";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Constants

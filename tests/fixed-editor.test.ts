@@ -286,8 +286,8 @@ test("terminal split re-enables Kitty keyboard protocol in alternate screen", ()
 
 	const setup = terminal.writes[0] ?? "";
 	assert.ok(setup.includes("\x1b[?1049h"));
-	assert.ok(setup.includes("\x1b[>7u"));
-	assert.ok(setup.indexOf("\x1b[?1049h") < setup.indexOf("\x1b[>7u"));
+	assert.ok(setup.includes("\x1b[>1u"));
+	assert.ok(setup.indexOf("\x1b[?1049h") < setup.indexOf("\x1b[>1u"));
 
 	compositor.dispose();
 
@@ -335,9 +335,9 @@ test("terminal split restores main screen mode when Kitty activates after instal
 
 	const cleanup = terminal.writes.at(-1) ?? "";
 	assert.ok(cleanup.includes("\x1b[<u"));
-	assert.ok(cleanup.includes("\x1b[>7u"));
+	assert.ok(cleanup.includes("\x1b[>1u"));
 	assert.ok(cleanup.indexOf("\x1b[<u") < cleanup.indexOf("\x1b[?1049l"));
-	assert.ok(cleanup.indexOf("\x1b[?1049l") < cleanup.indexOf("\x1b[>7u"));
+	assert.ok(cleanup.indexOf("\x1b[?1049l") < cleanup.indexOf("\x1b[>1u"));
 });
 
 test("terminal split restores main screen mode when modifyOtherKeys activates after install", () => {
@@ -1818,4 +1818,101 @@ test("terminal split unregisters emergency exit cleanup on dispose", () => {
 
 	compositor.dispose();
 	assert.equal(process.listenerCount("exit"), before);
+});
+
+// --- Characterization tests for pure exported helpers ---
+
+test("buildFixedClusterPaint returns empty string for zero cluster lines", () => {
+	const paint = buildFixedClusterPaint(
+		{ lines: [], cursor: null },
+		10,
+		40,
+		true,
+	);
+	assert.equal(paint, "");
+});
+
+test("buildFixedClusterPaint hides cursor when cursor is null", () => {
+	const paint = buildFixedClusterPaint(
+		{ lines: ["status", "editor"], cursor: null },
+		10,
+		40,
+		true,
+	);
+	assert.ok(paint.includes("\x1b[9;1H"));
+	assert.ok(paint.includes("\x1b[10;1H"));
+	assert.ok(paint.includes("status"));
+	assert.ok(paint.includes("editor"));
+	assert.ok(paint.endsWith("\x1b[?25l"), "should hide hardware cursor");
+	assert.ok(!paint.includes("\x1b[?25h"), "should not show hardware cursor");
+});
+
+test("buildFixedClusterPaint hides cursor when showHardwareCursor is false", () => {
+	const paint = buildFixedClusterPaint(
+		{ lines: ["edit"], cursor: { row: 0, col: 3 } },
+		5,
+		20,
+		false,
+	);
+	assert.ok(
+		paint.endsWith("\x1b[?25l"),
+		"cursor hidden even with cursor position",
+	);
+	assert.ok(!paint.includes("\x1b[?25h"));
+});
+
+test("buildFixedClusterPaint truncates lines exceeding terminal width", () => {
+	const longLine = "x".repeat(50);
+	const paint = buildFixedClusterPaint(
+		{ lines: [longLine], cursor: null },
+		4,
+		20,
+		false,
+	);
+	assert.ok(!paint.includes(longLine), "long line should be truncated");
+	assert.ok(paint.includes("x".repeat(20)));
+});
+
+test("buildFixedClusterPaint positions single cluster line at terminal bottom", () => {
+	const paint = buildFixedClusterPaint(
+		{ lines: ["only-line"], cursor: null },
+		24,
+		80,
+		false,
+	);
+	assert.ok(paint.includes("\x1b[24;1H"), "should place at last row");
+	assert.ok(paint.includes("only-line"));
+});
+
+test("buildFixedClusterPaint cursor col=0 clamps to column 1", () => {
+	const paint = buildFixedClusterPaint(
+		{ lines: ["abc"], cursor: { row: 0, col: 0 } },
+		10,
+		40,
+		true,
+	);
+	// col 0 → Math.max(1, 0+1) = 1, so cursor at row 10, col 1
+	assert.ok(paint.includes("\x1b[10;1H"));
+	assert.ok(paint.endsWith("\x1b[?25h"));
+});
+
+test("emergencyTerminalModeReset contains all required cleanup sequences", () => {
+	const reset = emergencyTerminalModeReset();
+	// Verify all expected sequences present
+	assert.ok(reset.includes("\x1b[?2026h"), "begins synchronized output");
+	assert.ok(reset.includes("\x1b[r"), "resets scroll region");
+	assert.ok(reset.includes("\x1b[?1006l"), "disables SGR mouse");
+	assert.ok(reset.includes("\x1b[?1002l"), "disables button-event mouse");
+	assert.ok(reset.includes("\x1b[?1000l"), "disables normal mouse");
+	assert.ok(reset.includes("\x1b[?1007h"), "re-enables alternate scroll");
+	assert.ok(reset.includes("\x1b[?1049l"), "exits alternate screen");
+	assert.ok(reset.includes("\x1b[<999u"), "resets kitty keyboard");
+	assert.ok(reset.includes("\x1b[>4;0m"), "resets modifyOtherKeys");
+	assert.ok(reset.includes("\x1b[?2026l"), "ends synchronized output");
+
+	// Verify ordering: scroll region reset before alt screen exit before keyboard reset
+	assert.ok(reset.indexOf("\x1b[r") < reset.indexOf("\x1b[?1049l"));
+	assert.ok(reset.indexOf("\x1b[?1049l") < reset.indexOf("\x1b[<999u"));
+	assert.ok(reset.indexOf("\x1b[?2026h") < reset.indexOf("\x1b[r"));
+	assert.ok(reset.indexOf("\x1b[<999u") < reset.indexOf("\x1b[?2026l"));
 });

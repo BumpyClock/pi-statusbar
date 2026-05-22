@@ -1,5 +1,5 @@
 import { hostname as osHostname } from "node:os";
-import { basename } from "node:path";
+import { basename, normalize } from "node:path";
 import type {
 	BuiltinStatusLineSegmentId,
 	RenderedSegment,
@@ -7,13 +7,13 @@ import type {
 	SemanticColor,
 	StatusLineSegment,
 	StatusLineSegmentId,
-} from "./types.ts";
+} from "../types.ts";
 import {
 	normalizeCompactExtensionStatus,
 	normalizeExtensionStatusValue,
-} from "./statusbar-config.ts";
-import { fg, rainbow, applyColor } from "./theme.ts";
-import { getIcons, SEP_DOT, getThinkingText } from "./icons.ts";
+} from "./config.ts";
+import { fg, rainbow, applyColor } from "../theme/index.ts";
+import { getIcons, SEP_DOT, getThinkingText } from "../theme/icons.ts";
 
 function color(
 	ctx: SegmentContext,
@@ -115,14 +115,18 @@ const pathSegment: StatusLineSegment = {
 				? ctx.shellCwd
 				: (ctx.cwd ?? process.cwd());
 		const home = process.env.HOME || process.env.USERPROFILE;
+		pwd = normalize(pwd).replace(/\\/g, "/");
+		const normalizedHome = home
+			? normalize(home).replace(/\\/g, "/")
+			: undefined;
 
 		if (mode === "basename") {
 			// Just the last directory component (cross-platform)
 			pwd = basename(pwd) || pwd;
 		} else {
 			// Abbreviate home directory for abbreviated/full modes
-			if (home && pwd.startsWith(home)) {
-				pwd = `~${pwd.slice(home.length)}`;
+			if (normalizedHome && pwd.startsWith(normalizedHome)) {
+				pwd = `~${pwd.slice(normalizedHome.length)}`;
 			}
 
 			// Strip /work/ prefix (common in containers)

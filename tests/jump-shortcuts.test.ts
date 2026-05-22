@@ -6,9 +6,10 @@ import {
 	isSupportedSuperShortcut,
 	matchesConfiguredShortcut,
 	shortcutConflictKey,
-} from "../shortcuts.ts";
+} from "../core/shortcuts.ts";
 
 const source = readFileSync(new URL("../index.ts", import.meta.url), "utf-8");
+const configSource = readFileSync(new URL("../core/shortcut-config.ts", import.meta.url), "utf-8");
 
 const statusbarShortcutKeys = new Set([
 	"stashHistory",
@@ -47,7 +48,7 @@ function normalizeShortcut(shortcut: string): string {
 
 function statusbarDefaults(): Map<string, string> {
 	const defaults = new Map<string, string>();
-	for (const match of source.matchAll(/^\s+([a-zA-Z0-9]+): "([^"]+)",?$/gm)) {
+	for (const match of configSource.matchAll(/^\s+([a-zA-Z0-9]+): "([^"]+)",?$/gm)) {
 		const key = match[1];
 		const value = match[2];
 		if (key && value && statusbarShortcutKeys.has(key)) {
@@ -68,12 +69,12 @@ test("chat jump shortcuts are configurable and route through fixed editor scroll
 	assert.equal(defaults.get("scrollChatDown"), "super+down");
 	assert.equal(defaults.get("editorStart"), "super+shift+up");
 	assert.equal(defaults.get("editorEnd"), "super+shift+down");
-	assert.match(source, /const CHAT_JUMP_SHORTCUTS:/);
-	assert.match(source, /shortcutKey: "jumpPreviousUserMessage"/);
-	assert.match(source, /shortcutKey: "jumpNextUserMessage"/);
-	assert.match(source, /shortcutKey: "jumpPreviousLlmMessage"/);
-	assert.match(source, /shortcutKey: "jumpNextLlmMessage"/);
-	assert.match(source, /shortcutKey: "jumpChatBottom"/);
+	assert.match(configSource, /const CHAT_JUMP_SHORTCUTS:/);
+	assert.match(configSource, /shortcutKey: "jumpPreviousUserMessage"/);
+	assert.match(configSource, /shortcutKey: "jumpNextUserMessage"/);
+	assert.match(configSource, /shortcutKey: "jumpPreviousLlmMessage"/);
+	assert.match(configSource, /shortcutKey: "jumpNextLlmMessage"/);
+	assert.match(configSource, /shortcutKey: "jumpChatBottom"/);
 	assert.match(
 		source,
 		/pi\.registerShortcut\(resolvedShortcuts\[shortcutKey\]/,
@@ -113,11 +114,11 @@ test("chat jump shortcuts are configurable and route through fixed editor scroll
 	);
 	assert.match(
 		source,
-		/modifier === "cmd" \|\| modifier === "command" \? "super" : modifier/,
+		/resolveShortcutConfig[\s\S]*from ".\/core\/shortcut-config\.ts"/,
 	);
 	assert.match(
 		source,
-		/shortcutUsesSuper\(normalizedShortcut\) &&\s*!isSupportedSuperShortcut\(normalizedShortcut\)/,
+		/CHAT_JUMP_SHORTCUTS[\s\S]*from ".\/core\/shortcut-config\.ts"/,
 	);
 	assert.match(
 		source,
@@ -348,33 +349,36 @@ test("statusbar shortcut defaults do not claim reserved Pi shortcuts", () => {
 
 test("statusbar fallback routing rejects reserved Pi shortcut defaults", () => {
 	assert.doesNotMatch(source, /KeybindingsManager/);
-	assert.match(source, /TUI_KEYBINDINGS/);
-	assert.match(source, /const APP_RESERVED_SHORTCUTS = \[/);
-	assert.match(source, /"alt\+enter"/);
-	assert.match(source, /"alt\+up"/);
-	assert.match(source, /"alt\+down"/);
-	assert.match(source, /"ctrl\+s"/);
-	assert.match(source, /"shift\+l"/);
+	assert.match(configSource, /TUI_KEYBINDINGS/);
+	assert.match(configSource, /const APP_RESERVED_SHORTCUTS = \[/);
+	assert.match(configSource, /"alt\+enter"/);
+	assert.match(configSource, /"alt\+up"/);
+	assert.match(configSource, /"alt\+down"/);
+	assert.match(configSource, /"ctrl\+s"/);
+	assert.match(configSource, /"shift\+l"/);
 	assert.match(
-		source,
+		configSource,
 		/for \(const definition of Object\.values\(TUI_KEYBINDINGS\)\)/,
 	);
 	assert.doesNotMatch(source, /RESERVED_TUI_KEYBINDING_IDS/);
 	assert.match(
-		source,
+		configSource,
 		/const EXTRA_RESERVED_SHORTCUTS = \["alt\+s"\] as const/,
 	);
 	assert.match(
 		source,
-		/const SHORTCUT_MODIFIER_ORDER = \["ctrl", "alt", "super", "shift"\] as const/,
+		/resolveShortcutConfig[\s\S]*from ".\/core\/shortcut-config\.ts"/,
 	);
 	assert.match(
 		source,
-		/const SHORTCUT_MODIFIERS = new Set(?:<string>)?\(SHORTCUT_MODIFIER_ORDER\)/,
+		/parseBashModeSettings[\s\S]*from ".\/core\/shortcut-config\.ts"/,
 	);
-	assert.match(source, /modifierRank\.get\(a\)/);
 	assert.match(
 		source,
+		/CHAT_JUMP_SHORTCUTS[\s\S]*from ".\/core\/shortcut-config\.ts"/,
+	);
+	assert.match(
+		configSource,
 		/configuredToggleShortcut &&\s*!reservedShortcuts\(\)\.has\(shortcutUsageKey\(configuredToggleShortcut\)\)/,
 	);
 });

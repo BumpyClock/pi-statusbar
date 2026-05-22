@@ -42,6 +42,30 @@ pi install npm:@bumpyclock/pi-statusbar
 
 Restart pi to activate.
 
+## Architecture
+
+**Entry point:** `index.ts` is the stable Pi runtime entry, wired via `package.json → pi.extensions → "./index.ts"`. It bootstraps the extension and should not be split or renamed.
+
+**Root files** are intentionally minimal:
+
+- `index.ts` — stable Pi runtime entry, wired via `package.json → pi.extensions → "./index.ts"`.
+- `types.ts` — shared type contracts used across implementation modules and tests.
+
+**Domain folders** contain the actual implementation:
+
+| Folder          | Purpose                                                                           |
+| --------------- | --------------------------------------------------------------------------------- |
+| `core/`         | Settings merge, shortcuts, stash helpers, prompt/stash history                    |
+| `statusbar/`    | Config parsing, presets, segments, layout, render scheduling, git/context helpers |
+| `theme/`        | Theme config, semantic colors, ANSI helpers, icons, separators                    |
+| `commands/`     | Slash-command handlers (`/statusbar`, `/vibe`, `/bash-mode`)                      |
+| `vibes/`        | Vibe config, packs, picker, animation, manager                                    |
+| `welcome/`      | Welcome overlay component and dismiss scheduler                                   |
+| `bash-mode/`    | Shell session, completion, history, transcript, editor                            |
+| `fixed-editor/` | Terminal compositor, mouse handling, cluster rendering                            |
+
+New internal implementation should live in the appropriate domain folder. Root TypeScript files should stay limited to `index.ts` and `types.ts`; package publishing lists those files explicitly plus each runtime domain folder.
+
 ## Usage
 
 Activates automatically. Toggle with `/statusbar`, switch presets with `/statusbar <name>`, fixed-editor mode with `/statusbar fixed-editor on|off|toggle`, and wheel mode with `/statusbar mouse-scroll on|off|toggle`.
@@ -295,7 +319,7 @@ Transform boring "Working..." messages into themed phrases that match your style
 
 ### Commands
 
-Vibe presets are named bundles of packs; `whimsical` is the only built-in vibe preset and enables every built-in pack. This is separate from statusbar layout presets such as `default`, `minimal`, and `compact`. Packs are individual themed message sets such as `star-wars` or `star-trek`. Themes are freeform strings used by the AI-generated prompt; `/vibe generate <theme>` stores that theme for future generated vibes.
+Vibe presets are named bundles of packs; `whimsical` is the only built-in vibe preset and enables every built-in pack. This is separate from statusbar layout presets such as `default`, `minimal`, and `compact`. Packs are individual themed message sets such as `star-wars` or `star-trek`. Themes are freeform strings used by the AI-generated prompt; `/vibe generate <theme>` stores that theme by rewriting the generated prompt template and switching `source` to `"generated"` — there is no separate `theme` setting. Running `/vibe generate star trek` bakes "star trek" into the prompt and enables generated vibes in one step.
 
 ```bash
 /vibe preset whimsical       → Activate the built-in whimsical vibe preset
@@ -385,6 +409,8 @@ Configure via preset options: `path: { mode: "full" }`
 ## Segments
 
 `model` · `thinking` · `shell_mode` · `path` · `git` · `subagents` · `token_in` · `token_out` · `token_total` · `cost` · `context_pct` · `context_total` · `time_spent` · `time` · `session` · `hostname` · `cache_read` · `cache_write` · `extension_statuses`
+
+> **Note:** The `subagents` segment is currently inert — it renders nothing and is hidden. It is a placeholder awaiting Pi platform support for subagent tracking. Including it in a preset layout is harmless but has no visible effect.
 
 ## Separators
 

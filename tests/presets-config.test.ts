@@ -5,8 +5,8 @@ import {
 	resolvePresetDef,
 	mergeSegmentsWithCustomItems,
 	nextStatusbarSettingWithPreset,
-} from "../statusbar-config.ts";
-import { PRESETS } from "../presets.ts";
+} from "../statusbar/config.ts";
+import { PRESETS } from "../statusbar/presets.ts";
 import type { PresetDef, StatusLinePreset } from "../types.ts";
 
 const BUILTIN_NAMES = Object.keys(PRESETS) as StatusLinePreset[];

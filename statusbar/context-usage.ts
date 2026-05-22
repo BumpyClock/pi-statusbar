@@ -1,11 +1,9 @@
+import { isRecord } from "../core/stash-helpers.ts";
+
 interface CoreContextUsage {
   contextTokens: number;
   contextWindow: number;
   contextPercent: number;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 export function readCoreContextUsage(ctx: unknown): CoreContextUsage | null {

@@ -1,6 +1,7 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { getDefaultColors } from "./theme.ts";
-import { parseVibeConfig, type VibeConfig } from "./vibe-config.ts";
+import { isRecord } from "../core/stash-helpers.ts";
+import { getDefaultColors } from "../theme/index.ts";
+import { parseVibeConfig, type VibeConfig } from "../vibes/config.ts";
 import type {
 	BuiltinStatusLineSegmentId,
 	ColorScheme,
@@ -14,7 +15,7 @@ import type {
 	StatusLineSegmentId,
 	StatusLineSegmentOptions,
 	UserPresetDef,
-} from "./types.ts";
+} from "../types.ts";
 
 export interface StatusbarConfig {
 	preset: string;
@@ -24,10 +25,6 @@ export interface StatusbarConfig {
 	fixedEditor: boolean;
 	/** Vibe (whimsical working message) config. Parsed via {@link parseVibeConfig}. */
 	vibe: VibeConfig;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function normalizeBuiltinPreset(
@@ -215,7 +212,8 @@ function normalizeSegmentOptions(
 			Number.isFinite(raw.path.maxLength) &&
 			raw.path.maxLength > 0
 		) {
-			pathOptions.maxLength = Math.floor(raw.path.maxLength);
+			const maxLength = Math.floor(raw.path.maxLength);
+			if (maxLength >= 1) pathOptions.maxLength = maxLength;
 		}
 		if (Object.keys(pathOptions).length > 0) result.path = pathOptions;
 	}

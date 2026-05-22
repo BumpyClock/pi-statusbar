@@ -6,7 +6,7 @@ import {
 	getUnsafeMessageTexts,
 	UNSAFE_RE,
 	type VibePack,
-} from "../vibe-packs.ts";
+} from "../vibes/packs.ts";
 
 describe("vibe-packs", () => {
 	// ─── Pack IDs ───────────────────────────────────────────────────────

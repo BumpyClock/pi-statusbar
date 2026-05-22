@@ -79,11 +79,9 @@ const DEFAULT_VIBE_CONFIG: VibeConfig = {
 	},
 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────
+import { isRecord } from "../core/stash-helpers.ts";
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+// ── Helpers ───────────────────────────────────────────────────────────────
 
 /** Coerce unknown to VibeSource, defaulting to `"packs"`. */
 function normalizeSource(value: unknown): VibeSource {

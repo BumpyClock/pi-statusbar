@@ -2,14 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
-import type { VibeConfig } from "../vibe-config.ts";
-import { BUILTIN_VIBE_PACKS, getUnsafeMessageTexts } from "../vibe-packs.ts";
-import { getAllowedPackMessages, isUnsafeMessage } from "../vibe-picker.ts";
+import type { VibeConfig } from "../vibes/config.ts";
+import { BUILTIN_VIBE_PACKS, getUnsafeMessageTexts } from "../vibes/packs.ts";
+import { getAllowedPackMessages, isUnsafeMessage } from "../vibes/picker.ts";
 import {
 	parseVibeConfig,
 	nextVibeSetting,
 	DEFAULT_GENERATED_VIBE_PROMPT,
-} from "../vibe-config.ts";
+} from "../vibes/config.ts";
 
 const FAUX_PROVIDER_PATH = new URL(
 	"../node_modules/@earendil-works/pi-ai/dist/providers/faux.js",
@@ -116,7 +116,7 @@ test("pack source: safeMode=true never returns unsafe corpus messages", async ()
 		onVibeBeforeAgentStart,
 		onVibeAgentStart,
 		disposeVibeManager,
-	} = await import("../working-vibes.ts");
+	} = await import("../vibes/manager.ts");
 
 	const cfg = testConfig({
 		source: "packs",
@@ -156,7 +156,7 @@ test("pack source: safeMode=true never returns unsafe corpus messages", async ()
 
 test("pack source: safeMode=false pool includes unsafe corpus messages", async () => {
 	const { initVibeManager, onVibeAgentStart, disposeVibeManager } =
-		await import("../working-vibes.ts");
+		await import("../vibes/manager.ts");
 
 	const cfg = testConfig({
 		source: "packs",
@@ -192,7 +192,7 @@ test("pack source: onVibeBeforeAgentStart sets a message from packs", async () =
 		onVibeBeforeAgentStart,
 		onVibeAgentStart,
 		disposeVibeManager,
-	} = await import("../working-vibes.ts");
+	} = await import("../vibes/manager.ts");
 
 	const cfg = testConfig({ source: "packs", animation: "none" });
 	initVibeManager({ modelRegistry: makeFakeModelRegistry(null) } as any, cfg);
@@ -222,7 +222,7 @@ test("pack source: messages preserve original punctuation (no forced ellipses)",
 		onVibeBeforeAgentStart,
 		onVibeAgentStart,
 		disposeVibeManager,
-	} = await import("../working-vibes.ts");
+	} = await import("../vibes/manager.ts");
 
 	const cfg = testConfig({ source: "packs", animation: "none" });
 	initVibeManager({ modelRegistry: makeFakeModelRegistry(null) } as any, cfg);
@@ -263,7 +263,7 @@ test("enabled:false skips onVibeBeforeAgentStart", async () => {
 		onVibeBeforeAgentStart,
 		onVibeAgentStart,
 		disposeVibeManager,
-	} = await import("../working-vibes.ts");
+	} = await import("../vibes/manager.ts");
 
 	const cfg = testConfig({ enabled: false });
 	initVibeManager({ modelRegistry: makeFakeModelRegistry(null) } as any, cfg);
@@ -286,7 +286,7 @@ test("enabled:false skips onVibeToolCall", async () => {
 		onVibeAgentStart,
 		onVibeToolCall,
 		disposeVibeManager,
-	} = await import("../working-vibes.ts");
+	} = await import("../vibes/manager.ts");
 
 	const cfg = testConfig({ enabled: false });
 	initVibeManager({ modelRegistry: makeFakeModelRegistry(null) } as any, cfg);
@@ -305,7 +305,7 @@ test("enabled:false skips onVibeToolCall", async () => {
 
 test("onVibeAgentEnd still resets even when disabled", async () => {
 	const { initVibeManager, onVibeAgentEnd, disposeVibeManager } = await import(
-		"../working-vibes.ts"
+		"../vibes/manager.ts"
 	);
 
 	const cfg = testConfig({ enabled: false });
@@ -324,7 +324,7 @@ test("onVibeAgentEnd still resets even when disabled", async () => {
 
 test("disposeVibeManager resets working message when callback provided", async () => {
 	const { initVibeManager, disposeVibeManager } = await import(
-		"../working-vibes.ts"
+		"../vibes/manager.ts"
 	);
 
 	const cfg = testConfig();
@@ -338,7 +338,7 @@ test("disposeVibeManager resets working message when callback provided", async (
 
 test("disposeVibeManager without callback does not throw", async () => {
 	const { initVibeManager, disposeVibeManager } = await import(
-		"../working-vibes.ts"
+		"../vibes/manager.ts"
 	);
 
 	const cfg = testConfig();
@@ -357,7 +357,7 @@ test("onVibeAgentEnd resets message after animation was active", async () => {
 		onVibeBeforeAgentStart,
 		onVibeAgentEnd,
 		disposeVibeManager,
-	} = await import("../working-vibes.ts");
+	} = await import("../vibes/manager.ts");
 
 	// Use shimmer animation so animation controller is created
 	const cfg = testConfig({ source: "packs", animation: "shimmer" });
@@ -402,7 +402,7 @@ test("disposeVibeManager stops animation and resets message", async () => {
 		onVibeAgentStart,
 		onVibeBeforeAgentStart,
 		disposeVibeManager,
-	} = await import("../working-vibes.ts");
+	} = await import("../vibes/manager.ts");
 
 	// Shimmer animation active
 	const cfg = testConfig({ source: "packs", animation: "shimmer" });
@@ -431,7 +431,7 @@ test("disposeVibeManager stops animation and resets message", async () => {
 
 test("getVibeConfig returns current config", async () => {
 	const { initVibeManager, getVibeConfig, disposeVibeManager } = await import(
-		"../working-vibes.ts"
+		"../vibes/manager.ts"
 	);
 
 	const cfg = testConfig({ safeMode: true });
@@ -449,7 +449,7 @@ test("updateVibeConfig replaces config", async () => {
 		updateVibeConfig,
 		getVibeConfig,
 		disposeVibeManager,
-	} = await import("../working-vibes.ts");
+	} = await import("../vibes/manager.ts");
 
 	const cfg = testConfig({ safeMode: false });
 	initVibeManager({ modelRegistry: makeFakeModelRegistry(null) } as any, cfg);
@@ -473,7 +473,7 @@ test("command transition: preset whimsical → generate theme → off", async ()
 		onVibeAgentStart,
 		onVibeBeforeAgentStart,
 		disposeVibeManager,
-	} = await import("../working-vibes.ts");
+	} = await import("../vibes/manager.ts");
 
 	// Step 1: preset whimsical (packs, enabled, safeMode on)
 	const presetWhimsical = parseVibeConfig(
@@ -559,7 +559,7 @@ test("generated source: system prompt includes loading messages instruction", as
 			onVibeAgentStart,
 			onVibeBeforeAgentStart,
 			disposeVibeManager,
-		} = await import("../working-vibes.ts");
+		} = await import("../vibes/manager.ts");
 
 		const registration = registerFauxProvider({
 			provider: "test-provider",
@@ -627,7 +627,7 @@ test("generated source: safeMode adds profanity instruction to system prompt", a
 			onVibeAgentStart,
 			onVibeBeforeAgentStart,
 			disposeVibeManager,
-		} = await import("../working-vibes.ts");
+		} = await import("../vibes/manager.ts");
 
 		const registration = registerFauxProvider({
 			provider: "test-provider",
