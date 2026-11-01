@@ -41,6 +41,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test:hooks": "node --test scripts/tests/pre-push.test.mjs",
     "test": "node --experimental-strip-types --test tests/**/*.test.ts",
     "bump:patch": "node scripts/bump-version.js patch",
     "bump:minor": "node scripts/bump-version.js minor",
@@ -55,7 +56,8 @@
   "devDependencies": {
     "@earendil-works/pi-ai": "^0.74.0",
     "@earendil-works/pi-coding-agent": "^0.74.0",
-    "@earendil-works/pi-tui": "^0.74.0"
+    "@earendil-works/pi-tui": "^0.74.0",
+    "typescript": "5.9.3"
   },
   "pi": {
     "extensions": [

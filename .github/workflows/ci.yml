@@ -15,7 +15,7 @@ permissions:
 jobs:
   check:
     name: Check
-    runs-on: ubuntu-latest
+    runs-on: boat
     steps:
       - uses: actions/checkout@v6
 
@@ -27,4 +27,5 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: npm run test:hooks
       - run: npm pack --dry-run

@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+if ! command -v node >/dev/null 2>&1; then
+  echo 'pre-push requires Node 24 and npm ci. See docs/development-checks.md.' >&2
+  exit 1
+fi
+exec node scripts/pre-push.mjs

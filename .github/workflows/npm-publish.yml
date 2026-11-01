@@ -17,6 +17,7 @@ permissions:
 jobs:
   publish:
     name: Publish
+    # npm provenance requires a GitHub-hosted runner; keep this publication lane native to that provider.
     runs-on: ubuntu-latest
     permissions:
       contents: read

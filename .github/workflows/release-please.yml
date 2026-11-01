@@ -12,7 +12,7 @@ permissions:
 jobs:
   node-quality:
     name: Node Quality
-    runs-on: ubuntu-latest
+    runs-on: boat
     steps:
       - uses: actions/checkout@v6
 
@@ -28,7 +28,7 @@ jobs:
 
   release-please:
     name: Release Please
-    runs-on: ubuntu-latest
+    runs-on: boat
     needs: node-quality
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}

@@ -42,6 +42,10 @@ pi install npm:@bumpyclock/pi-statusbar
 
 Restart pi to activate.
 
+## Development
+
+See [development checks and optional pre-push setup](docs/development-checks.md). Use Node 24 and `npm ci`; checks use the pinned local TypeScript compiler.
+
 ## Architecture
 
 **Entry point:** `index.ts` is the stable Pi runtime entry, wired via `package.json → pi.extensions → "./index.ts"`. It bootstraps the extension and should not be split or renamed.
